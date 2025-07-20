@@ -49,127 +49,35 @@ tasks:
     cmds:
       - go test -v ./...
 
-  test-race:
-    desc: Run tests with race detection
-    dir: gfwreport
-    cmds:
-      - go test -race -v ./...
-
-  test-coverage:
-    desc: Run tests with coverage
-    dir: gfwreport
-    cmds:
-      - go test -coverprofile=coverage.out ./...
-      - go tool cover -html=coverage.out -o coverage.html
-      - echo "Coverage report generated: gfwreport/coverage.html"
-
-  bench:
-    desc: Run benchmarks
-    dir: gfwreport
-    cmds:
-      - go test -bench=. -benchmem ./...
-
-  # Building
-  build-plugin:
-    desc: Build plugin only (for development)
-    dir: gfwreport
-    cmds:
-      - go build -v ./...
-
   build:
-    desc: Build Caddy with GFWReport plugin
-    cmds:
-      - go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-      - mkdir -p {{.BUILD_DIR}}
-      - xcaddy build --output {{.BUILD_DIR}}/{{.BINARY_NAME}} --with github.com/ysicing/caddy2-extra/gfwreport=./gfwreport
-      - echo "Binary built: {{.BUILD_DIR}}/{{.BINARY_NAME}}"
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} list-modules | grep {{.PLUGIN_NAME}}
-
-  build-full:
     desc: Build Caddy with GFWReport and DNS plugins
     cmds:
-      - go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-      - mkdir -p {{.BUILD_DIR}}
-      - xcaddy build --output {{.BUILD_DIR}}/{{.BINARY_NAME}}
-          --with github.com/ysicing/caddy2-extra/gfwreport=./gfwreport
+      - command -v xcaddy || go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+      - xcaddy build
+          --with github.com/ysicing/caddy2-extra=../caddy2-extra
           --with github.com/caddy-dns/cloudflare
           --with github.com/caddy-dns/tencentcloud
           --with github.com/caddy-dns/alidns
-      - echo "Binary built: {{.BUILD_DIR}}/{{.BINARY_NAME}}"
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} list-modules
-
-  # Development and testing
-  dev:
-    desc: Build and run with development config
-    cmds:
-      - task: build
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} run --config examples/basic-config.Caddyfile --adapter caddyfile
+      - ./caddy list-modules
 
   run:
     desc: Run with local config
     cmds:
       - task: build
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} run --config ./Caddyfile.local --adapter caddyfile
+      - ./caddy run --config ./Caddyfile.local --adapter caddyfile
 
   validate:
     desc: Validate configuration files
     cmds:
       - task: build
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} validate --config examples/basic-config.Caddyfile --adapter caddyfile
-      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} validate --config examples/advanced-config.Caddyfile --adapter caddyfile
-
-  # Docker
-  docker-build:
-    desc: Build Docker image
-    cmds:
-      - docker build -t caddy-{{.PLUGIN_NAME}}:latest -f examples/Dockerfile .
-
-  docker-run:
-    desc: Run Docker container
-    cmds:
-      - task: docker-build
-      - docker run -d --name caddy-{{.PLUGIN_NAME}} -p 8080:80 -p 2019:2019 caddy-{{.PLUGIN_NAME}}:latest
-
-  docker-stop:
-    desc: Stop and remove Docker container
-    cmds:
-      - docker stop caddy-{{.PLUGIN_NAME}} || true
-      - docker rm caddy-{{.PLUGIN_NAME}} || true
+      - ./caddy validate --config examples/basic-config.Caddyfile --adapter caddyfile
+      - ./caddy validate --config examples/advanced-config.Caddyfile --adapter caddyfile
 
   # Utilities
   clean:
     desc: Clean build artifacts
     cmds:
-      - rm -rf {{.BUILD_DIR}}
-      - rm -f gfwreport/coverage.out gfwreport/coverage.html
-      - rm -f {{.BINARY_NAME}}
-
-  install:
-    desc: Install binary to /usr/local/bin
-    cmds:
-      - task: build
-      - sudo cp {{.BUILD_DIR}}/{{.BINARY_NAME}} /usr/local/bin/
-      - sudo chmod +x /usr/local/bin/{{.BINARY_NAME}}
-      - echo "Installed to /usr/local/bin/{{.BINARY_NAME}}"
-
-  # CI/CD tasks
-  ci:
-    desc: Run CI pipeline (format, lint, test, build)
-    cmds:
-      - task: fmt
-      - task: golint
-      - task: test
-      - task: test-race
-      - task: build
-
-  release:
-    desc: Prepare for release
-    cmds:
-      - task: clean
-      - task: ci
-      - task: test-coverage
-      - task: bench
-      - echo "Release preparation complete"
+      - rm -rf caddy
 
   # Default task
   default:

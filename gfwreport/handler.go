@@ -17,6 +17,15 @@ import (
 
 // Module registration is handled in plugin.go
 
+// Interface guards - 确保GFWReportHandler实现了所需的接口
+var (
+	_ caddy.Module                = (*GFWReportHandler)(nil)
+	_ caddy.Provisioner           = (*GFWReportHandler)(nil)
+	_ caddyfile.Unmarshaler       = (*GFWReportHandler)(nil)
+	_ caddyhttp.MiddlewareHandler = (*GFWReportHandler)(nil)
+	_ caddy.CleanerUpper          = (*GFWReportHandler)(nil)
+)
+
 // GFWReportHandler implements the main Caddy handler for the gfwreport plugin
 type GFWReportHandler struct {
 	// Configuration file path for malicious patterns
@@ -47,7 +56,7 @@ type HookConfig struct {
 }
 
 // CaddyModule returns the Caddy module information
-func (GFWReportHandler) CaddyModule() caddy.ModuleInfo {
+func (*GFWReportHandler) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.handlers.gfwreport",
 		New: func() caddy.Module { return new(GFWReportHandler) },

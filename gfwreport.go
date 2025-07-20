@@ -11,13 +11,13 @@ import (
 const (
 	PluginName    = "gfwreport"
 	PluginVersion = "1.0.0"
-	PluginAuthor  = "GFWReport Team"
+	PluginAuthor  = "ysicing"
 )
 
 // init registers the plugin with Caddy
 func init() {
 	// Register the module
-	caddy.RegisterModule(gfwreport.GFWReportHandler{})
+	caddy.RegisterModule(&gfwreport.GFWReportHandler{})
 
 	// Register the Caddyfile directive
 	httpcaddyfile.RegisterHandlerDirective(PluginName, gfwreport.ParseCaddyfile)

@@ -63,7 +63,7 @@ func (er *EventReporter) ReportThreat(event *ThreatEvent) {
 				zap.String("threat_type", event.ThreatType),
 				zap.Error(err))
 		} else {
-			er.logger.Info("HTTP webhook report sent successfully",
+			er.logger.Debug("HTTP webhook report sent completed",
 				zap.String("url", er.config.Remote),
 				zap.String("threat_type", event.ThreatType))
 		}
@@ -81,7 +81,7 @@ func (er *EventReporter) ReportThreat(event *ThreatEvent) {
 				zap.String("threat_type", event.ThreatType),
 				zap.Error(err))
 		} else {
-			er.logger.Info("shell command executed successfully",
+			er.logger.Debug("shell command executed completed",
 				zap.String("command", er.config.Exec),
 				zap.String("threat_type", event.ThreatType))
 		}
@@ -112,7 +112,7 @@ func (er *EventReporter) sendHTTPReport(event *ThreatEvent) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "caddy-gfwreport/1.0")
+	req.Header.Set("User-Agent", "caddy-gfwreport/1.0.0")
 
 	// Add timeout context
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultHTTPTimeout)
@@ -135,10 +135,6 @@ func (er *EventReporter) sendHTTPReport(event *ThreatEvent) error {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("HTTP request failed with status: %d %s", resp.StatusCode, resp.Status)
 	}
-
-	er.logger.Debug("HTTP report sent successfully",
-		zap.String("url", er.config.Remote),
-		zap.Int("status_code", resp.StatusCode))
 
 	return nil
 }
@@ -172,7 +168,7 @@ func (er *EventReporter) executeCommand(event *ThreatEvent) error {
 		return fmt.Errorf("command execution failed: %w, output: %s", err, string(output))
 	}
 
-	er.logger.Debug("command executed successfully",
+	er.logger.Debug("command executed completed",
 		zap.String("command", er.config.Exec),
 		zap.String("output", string(output)),
 		zap.Int("output_length", len(output)))

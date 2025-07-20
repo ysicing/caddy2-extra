@@ -1,33 +1,48 @@
 (LOG) {
-    log {
-        output file /var/log/caddy.log {
-            roll_size 1mb
-		    roll_keep 5
-		    roll_keep_for 1h
-        }
-        format console {
-            time_format "iso8601"
-        }
-    }
+		log {
+				output file "{args[0]}" {
+						roll_size 100mb
+						roll_keep 5
+						roll_keep_for 7d
+						roll_uncompressed
+						roll_local_time
+				}
+				format console {
+						time_format "2006-01-02T15:04:05.000Z07:00"
+				}
+		}
 }
 
 (COMCFG) {
-    encode zstd gzip
+		encode {
+				zstd
+				gzip 6
+				match {
+						header Content-Type text*
+						header Content-Type application/json*
+						header Content-Type application/javascript*
+						header Content-Type application/xhtml+xml*
+						header Content-Type application/atom+xml*
+						header Content-Type application/rss+xml*
+						header Content-Type image/svg+xml*
+				}
+			}
 }
 
 {
-    debug
+		debug
+		order gfwreport before file_server
+		default_sni errpage.ysicing.net
 }
 
 :80 {
     import COMCFG
-    import LOG
+    import LOG /tmp/caddy.log
     metrics /metrics
     gfwreport {
-        file report.txt
-        remote http://www.baidu.com
+        file docker/report.txt
+        remote https://www.baidu.com
     }
     file_server {
-        root /etc/caddy/example/allow
-    }
+        root ./docker
 }

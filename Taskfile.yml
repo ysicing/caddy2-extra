@@ -2,11 +2,6 @@
 
 version: '3'
 
-vars:
-  PLUGIN_NAME: gfwreport
-  BINARY_NAME: caddy
-  BUILD_DIR: build
-
 tasks:
   # Code formatting and linting
   gofmt:
@@ -45,12 +40,12 @@ tasks:
   # Testing
   test:
     desc: Run unit tests
-    dir: gfwreport
+    dir: report
     cmds:
       - go test -v ./...
 
   build:
-    desc: Build Caddy with GFWReport and DNS plugins
+    desc: Build Caddy
     cmds:
       - command -v xcaddy || go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
       - xcaddy build

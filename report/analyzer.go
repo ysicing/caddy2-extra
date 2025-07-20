@@ -1,4 +1,4 @@
-package gfwreport
+package report
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package gfwreport
+package report
 
 import (
 	"context"
@@ -28,11 +28,11 @@ func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func TestGFWReportHandler_CaddyModule(t *testing.T) {
-	handler := GFWReportHandler{}
+func TestReportHandler_CaddyModule(t *testing.T) {
+	handler := ReportHandler{}
 	moduleInfo := handler.CaddyModule()
 
-	expectedID := "http.handlers.gfwreport"
+	expectedID := "http.handlers.report"
 	if string(moduleInfo.ID) != expectedID {
 		t.Errorf("expected module ID %s, got %s", expectedID, string(moduleInfo.ID))
 	}
@@ -47,12 +47,12 @@ func TestGFWReportHandler_CaddyModule(t *testing.T) {
 		t.Error("expected New() to return a non-nil handler")
 	}
 
-	if _, ok := newHandler.(*GFWReportHandler); !ok {
-		t.Error("expected New() to return a *GFWReportHandler")
+	if _, ok := newHandler.(*ReportHandler); !ok {
+		t.Error("expected New() to return a *ReportHandler")
 	}
 }
 
-func TestGFWReportHandler_Provision(t *testing.T) {
+func TestReportHandler_Provision(t *testing.T) {
 	tests := []struct {
 		name       string
 		configFile string
@@ -87,7 +87,7 @@ func TestGFWReportHandler_Provision(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := &GFWReportHandler{
+			handler := &ReportHandler{
 				ConfigFile: tt.configFile,
 				Hook:       tt.hook,
 			}
@@ -131,9 +131,9 @@ func TestGFWReportHandler_Provision(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_ServeHTTP(t *testing.T) {
+func TestReportHandler_ServeHTTP(t *testing.T) {
 	// Create and provision handler
-	handler := &GFWReportHandler{}
+	handler := &ReportHandler{}
 
 	// Create a minimal context for testing
 	ctx := caddy.Context{
@@ -175,9 +175,9 @@ func TestGFWReportHandler_ServeHTTP(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func TestGFWReportHandler_ServeHTTP_WithThreat(t *testing.T) {
+func TestReportHandler_ServeHTTP_WithThreat(t *testing.T) {
 	// Create handler with pattern that will match
-	handler := &GFWReportHandler{}
+	handler := &ReportHandler{}
 
 	// Create a minimal context for testing
 	ctx := caddy.Context{
@@ -222,8 +222,8 @@ func TestGFWReportHandler_ServeHTTP_WithThreat(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
-func TestGFWReportHandler_Cleanup(t *testing.T) {
-	handler := &GFWReportHandler{}
+func TestReportHandler_Cleanup(t *testing.T) {
+	handler := &ReportHandler{}
 
 	// Create a minimal context for testing
 	ctx := caddy.Context{
@@ -253,31 +253,31 @@ func TestGFWReportHandler_Cleanup(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
+func TestReportHandler_UnmarshalCaddyfile(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
-		expected    *GFWReportHandler
+		expected    *ReportHandler
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name:  "basic config with file",
-			input: "gfwreport {\n    file /path/to/patterns.txt\n}",
-			expected: &GFWReportHandler{
+			input: "report {\n    file /path/to/patterns.txt\n}",
+			expected: &ReportHandler{
 				ConfigFile: "/path/to/patterns.txt",
 			},
 			expectError: false,
 		},
 		{
 			name: "config with hook remote",
-			input: `gfwreport {
+			input: `report {
     file /path/to/patterns.txt
     hook {
         remote http://example.com/webhook
     }
 }`,
-			expected: &GFWReportHandler{
+			expected: &ReportHandler{
 				ConfigFile: "/path/to/patterns.txt",
 				Hook: &HookConfig{
 					Remote: "http://example.com/webhook",
@@ -287,12 +287,12 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 		},
 		{
 			name: "config with hook exec",
-			input: `gfwreport {
+			input: `report {
     hook {
         exec "echo 'threat detected'"
     }
 }`,
-			expected: &GFWReportHandler{
+			expected: &ReportHandler{
 				Hook: &HookConfig{
 					Exec: "echo 'threat detected'",
 				},
@@ -301,14 +301,14 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 		},
 		{
 			name: "config with both hook types",
-			input: `gfwreport {
+			input: `report {
     file /path/to/patterns.txt
     hook {
         remote http://example.com/webhook
         exec "echo 'threat detected'"
     }
 }`,
-			expected: &GFWReportHandler{
+			expected: &ReportHandler{
 				ConfigFile: "/path/to/patterns.txt",
 				Hook: &HookConfig{
 					Remote: "http://example.com/webhook",
@@ -319,11 +319,11 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 		},
 		{
 			name: "config with legacy remote directive",
-			input: `gfwreport {
+			input: `report {
     file /path/to/patterns.txt
     remote https://webhook.example.com/api/threats
 }`,
-			expected: &GFWReportHandler{
+			expected: &ReportHandler{
 				ConfigFile: "/path/to/patterns.txt",
 				Hook: &HookConfig{
 					Remote: "https://webhook.example.com/api/threats",
@@ -333,12 +333,12 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 		},
 		{
 			name: "config with HTTPS URL",
-			input: `gfwreport {
+			input: `report {
     hook {
         remote https://secure.example.com/webhook
     }
 }`,
-			expected: &GFWReportHandler{
+			expected: &ReportHandler{
 				Hook: &HookConfig{
 					Remote: "https://secure.example.com/webhook",
 				},
@@ -347,119 +347,119 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 		},
 		{
 			name:        "invalid directive",
-			input:       "gfwreport {\n    invalid_directive value\n}",
+			input:       "report {\n    invalid_directive value\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "unknown directive",
 		},
 		{
 			name:        "file without value",
-			input:       "gfwreport {\n    file\n}",
+			input:       "report {\n    file\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "wrong argument count",
 		},
 		{
 			name:        "hook remote without value",
-			input:       "gfwreport {\n    hook {\n        remote\n    }\n}",
+			input:       "report {\n    hook {\n        remote\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "wrong argument count",
 		},
 		{
 			name:        "empty file path",
-			input:       "gfwreport {\n    file \"\"\n}",
+			input:       "report {\n    file \"\"\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "file path cannot be empty",
 		},
 		{
 			name:        "empty remote URL",
-			input:       "gfwreport {\n    hook {\n        remote \"\"\n    }\n}",
+			input:       "report {\n    hook {\n        remote \"\"\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "remote URL cannot be empty",
 		},
 		{
 			name:        "empty exec command",
-			input:       "gfwreport {\n    hook {\n        exec \"\"\n    }\n}",
+			input:       "report {\n    hook {\n        exec \"\"\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "exec command cannot be empty",
 		},
 		{
 			name:        "invalid URL scheme",
-			input:       "gfwreport {\n    hook {\n        remote ftp://example.com\n    }\n}",
+			input:       "report {\n    hook {\n        remote ftp://example.com\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "invalid remote URL",
 		},
 		{
 			name:        "malformed URL",
-			input:       "gfwreport {\n    hook {\n        remote not-a-url\n    }\n}",
+			input:       "report {\n    hook {\n        remote not-a-url\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "invalid remote URL",
 		},
 		{
 			name:        "URL without scheme",
-			input:       "gfwreport {\n    hook {\n        remote example.com/webhook\n    }\n}",
+			input:       "report {\n    hook {\n        remote example.com/webhook\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "invalid remote URL",
 		},
 		{
 			name:        "file with multiple arguments",
-			input:       "gfwreport {\n    file /path/to/file.txt extra_arg\n}",
+			input:       "report {\n    file /path/to/file.txt extra_arg\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "file directive accepts only one argument",
 		},
 		{
 			name:        "remote with multiple arguments",
-			input:       "gfwreport {\n    hook {\n        remote http://example.com extra_arg\n    }\n}",
+			input:       "report {\n    hook {\n        remote http://example.com extra_arg\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "remote directive accepts only one argument",
 		},
 		{
 			name:        "exec with multiple arguments",
-			input:       "gfwreport {\n    hook {\n        exec \"echo test\" extra_arg\n    }\n}",
+			input:       "report {\n    hook {\n        exec \"echo test\" extra_arg\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "exec directive accepts only one argument",
 		},
 		{
-			name:        "gfwreport with arguments on same line",
-			input:       "gfwreport arg1 {\n    file /path/to/file.txt\n}",
+			name:        "report with arguments on same line",
+			input:       "report arg1 {\n    file /path/to/file.txt\n}",
 			expected:    nil,
 			expectError: true,
-			errorMsg:    "gfwreport directive does not accept arguments on the same line",
+			errorMsg:    "report directive does not accept arguments on the same line",
 		},
 		{
 			name:        "hook with arguments on same line",
-			input:       "gfwreport {\n    hook arg1 {\n        remote http://example.com\n    }\n}",
+			input:       "report {\n    hook arg1 {\n        remote http://example.com\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "hook directive does not accept arguments on the same line",
 		},
 		{
 			name:        "empty hook block",
-			input:       "gfwreport {\n    file /path/to/file.txt\n    hook {\n    }\n}",
+			input:       "report {\n    file /path/to/file.txt\n    hook {\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "hook block requires at least one of 'remote' or 'exec' directives",
 		},
 		{
 			name:        "no configuration provided",
-			input:       "gfwreport {\n}",
+			input:       "report {\n}",
 			expected:    nil,
 			expectError: true,
-			errorMsg:    "gfwreport requires at least a file path or hook configuration",
+			errorMsg:    "report requires at least a file path or hook configuration",
 		},
 		{
 			name:        "unknown hook directive",
-			input:       "gfwreport {\n    hook {\n        unknown_directive value\n    }\n}",
+			input:       "report {\n    hook {\n        unknown_directive value\n    }\n}",
 			expected:    nil,
 			expectError: true,
 			errorMsg:    "unknown hook directive",
@@ -469,7 +469,7 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
-			handler := &GFWReportHandler{}
+			handler := &ReportHandler{}
 
 			err := handler.UnmarshalCaddyfile(dispenser)
 
@@ -514,9 +514,9 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_Integration(t *testing.T) {
+func TestReportHandler_Integration(t *testing.T) {
 	// Create a complete integration test
-	handler := &GFWReportHandler{
+	handler := &ReportHandler{
 		ConfigFile: "", // No config file for this test
 		Hook:       &HookConfig{
 			// No hooks for this test to avoid external dependencies
@@ -587,8 +587,8 @@ func TestGFWReportHandler_Integration(t *testing.T) {
 }
 
 // Benchmark tests
-func BenchmarkGFWReportHandler_ServeHTTP(b *testing.B) {
-	handler := &GFWReportHandler{}
+func BenchmarkReportHandler_ServeHTTP(b *testing.B) {
+	handler := &ReportHandler{}
 
 	// Create a minimal context for testing
 	ctx := caddy.Context{
@@ -660,7 +660,7 @@ func TestIsValidURL(t *testing.T) {
 }
 
 // Test individual parsing functions
-func TestGFWReportHandler_ParseFileDirective(t *testing.T) {
+func TestReportHandler_ParseFileDirective(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
@@ -702,7 +702,7 @@ func TestGFWReportHandler_ParseFileDirective(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			dispenser.Next() // Move to the directive
 
-			handler := &GFWReportHandler{}
+			handler := &ReportHandler{}
 			err := handler.parseFileDirective(dispenser)
 
 			if tt.expectError {
@@ -728,7 +728,7 @@ func TestGFWReportHandler_ParseFileDirective(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_ParseRemoteHook(t *testing.T) {
+func TestReportHandler_ParseRemoteHook(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
@@ -783,7 +783,7 @@ func TestGFWReportHandler_ParseRemoteHook(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			dispenser.Next() // Move to the directive
 
-			handler := &GFWReportHandler{
+			handler := &ReportHandler{
 				Hook: &HookConfig{},
 			}
 			err := handler.parseRemoteHook(dispenser)
@@ -811,7 +811,7 @@ func TestGFWReportHandler_ParseRemoteHook(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_ParseExecHook(t *testing.T) {
+func TestReportHandler_ParseExecHook(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
@@ -859,7 +859,7 @@ func TestGFWReportHandler_ParseExecHook(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			dispenser.Next() // Move to the directive
 
-			handler := &GFWReportHandler{
+			handler := &ReportHandler{
 				Hook: &HookConfig{},
 			}
 			err := handler.parseExecHook(dispenser)
@@ -887,23 +887,23 @@ func TestGFWReportHandler_ParseExecHook(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_ValidateConfig(t *testing.T) {
+func TestReportHandler_ValidateConfig(t *testing.T) {
 	tests := []struct {
 		name        string
-		handler     *GFWReportHandler
+		handler     *ReportHandler
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "valid config with file only",
-			handler: &GFWReportHandler{
+			handler: &ReportHandler{
 				ConfigFile: "/path/to/patterns.txt",
 			},
 			expectError: false,
 		},
 		{
 			name: "valid config with hook only",
-			handler: &GFWReportHandler{
+			handler: &ReportHandler{
 				Hook: &HookConfig{
 					Remote: "http://example.com/webhook",
 				},
@@ -912,7 +912,7 @@ func TestGFWReportHandler_ValidateConfig(t *testing.T) {
 		},
 		{
 			name: "valid config with both file and hook",
-			handler: &GFWReportHandler{
+			handler: &ReportHandler{
 				ConfigFile: "/path/to/patterns.txt",
 				Hook: &HookConfig{
 					Remote: "http://example.com/webhook",
@@ -923,13 +923,13 @@ func TestGFWReportHandler_ValidateConfig(t *testing.T) {
 		},
 		{
 			name:        "invalid config with no file or hook",
-			handler:     &GFWReportHandler{},
+			handler:     &ReportHandler{},
 			expectError: true,
-			errorMsg:    "gfwreport requires at least a file path or hook configuration",
+			errorMsg:    "report requires at least a file path or hook configuration",
 		},
 		{
 			name: "invalid config with empty hook",
-			handler: &GFWReportHandler{
+			handler: &ReportHandler{
 				Hook: &HookConfig{},
 			},
 			expectError: true,
@@ -939,7 +939,7 @@ func TestGFWReportHandler_ValidateConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dispenser := caddyfile.NewTestDispenser("gfwreport {}")
+			dispenser := caddyfile.NewTestDispenser("report {}")
 			err := tt.handler.validateConfig(dispenser)
 
 			if tt.expectError {
@@ -961,20 +961,20 @@ func TestGFWReportHandler_ValidateConfig(t *testing.T) {
 }
 
 // Test complex configuration scenarios
-func TestGFWReportHandler_ComplexConfigurations(t *testing.T) {
+func TestReportHandler_ComplexConfigurations(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       string
 		expectError bool
-		validate    func(*testing.T, *GFWReportHandler)
+		validate    func(*testing.T, *ReportHandler)
 	}{
 		{
 			name: "minimal valid configuration",
-			input: `gfwreport {
+			input: `report {
     file /etc/caddy/patterns.txt
 }`,
 			expectError: false,
-			validate: func(t *testing.T, h *GFWReportHandler) {
+			validate: func(t *testing.T, h *ReportHandler) {
 				if h.ConfigFile != "/etc/caddy/patterns.txt" {
 					t.Errorf("expected ConfigFile '/etc/caddy/patterns.txt', got '%s'", h.ConfigFile)
 				}
@@ -985,7 +985,7 @@ func TestGFWReportHandler_ComplexConfigurations(t *testing.T) {
 		},
 		{
 			name: "full configuration with all options",
-			input: `gfwreport {
+			input: `report {
     file /etc/caddy/patterns.txt
     hook {
         remote https://api.security.com/threats
@@ -993,7 +993,7 @@ func TestGFWReportHandler_ComplexConfigurations(t *testing.T) {
     }
 }`,
 			expectError: false,
-			validate: func(t *testing.T, h *GFWReportHandler) {
+			validate: func(t *testing.T, h *ReportHandler) {
 				if h.ConfigFile != "/etc/caddy/patterns.txt" {
 					t.Errorf("expected ConfigFile '/etc/caddy/patterns.txt', got '%s'", h.ConfigFile)
 				}
@@ -1010,12 +1010,12 @@ func TestGFWReportHandler_ComplexConfigurations(t *testing.T) {
 		},
 		{
 			name: "configuration with legacy remote directive",
-			input: `gfwreport {
+			input: `report {
     file /etc/caddy/patterns.txt
     remote http://legacy.webhook.com/api
 }`,
 			expectError: false,
-			validate: func(t *testing.T, h *GFWReportHandler) {
+			validate: func(t *testing.T, h *ReportHandler) {
 				if h.ConfigFile != "/etc/caddy/patterns.txt" {
 					t.Errorf("expected ConfigFile '/etc/caddy/patterns.txt', got '%s'", h.ConfigFile)
 				}
@@ -1032,7 +1032,7 @@ func TestGFWReportHandler_ComplexConfigurations(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
-			handler := &GFWReportHandler{}
+			handler := &ReportHandler{}
 
 			err := handler.UnmarshalCaddyfile(dispenser)
 
@@ -1065,12 +1065,12 @@ func TestParseCaddyfile(t *testing.T) {
 	}{
 		{
 			name:        "basic configuration",
-			input:       "gfwreport {\n    file /etc/patterns.txt\n}",
+			input:       "report {\n    file /etc/patterns.txt\n}",
 			expectError: false,
 			validate: func(t *testing.T, handler caddyhttp.MiddlewareHandler) {
-				h, ok := handler.(*GFWReportHandler)
+				h, ok := handler.(*ReportHandler)
 				if !ok {
-					t.Fatal("expected *GFWReportHandler")
+					t.Fatal("expected *ReportHandler")
 				}
 				if h.ConfigFile != "/etc/patterns.txt" {
 					t.Errorf("expected ConfigFile '/etc/patterns.txt', got '%s'", h.ConfigFile)
@@ -1079,12 +1079,12 @@ func TestParseCaddyfile(t *testing.T) {
 		},
 		{
 			name:        "configuration with hook",
-			input:       "gfwreport {\n    hook {\n        remote http://example.com/webhook\n    }\n}",
+			input:       "report {\n    hook {\n        remote http://example.com/webhook\n    }\n}",
 			expectError: false,
 			validate: func(t *testing.T, handler caddyhttp.MiddlewareHandler) {
-				h, ok := handler.(*GFWReportHandler)
+				h, ok := handler.(*ReportHandler)
 				if !ok {
-					t.Fatal("expected *GFWReportHandler")
+					t.Fatal("expected *ReportHandler")
 				}
 				if h.Hook == nil {
 					t.Fatal("expected Hook to be set")
@@ -1096,7 +1096,7 @@ func TestParseCaddyfile(t *testing.T) {
 		},
 		{
 			name:        "invalid configuration",
-			input:       "gfwreport {\n}",
+			input:       "report {\n}",
 			expectError: true,
 			validate:    nil,
 		},
@@ -1133,7 +1133,7 @@ func TestParseCaddyfile(t *testing.T) {
 }
 
 // Test lifecycle management
-func TestGFWReportHandler_LifecycleManagement(t *testing.T) {
+func TestReportHandler_LifecycleManagement(t *testing.T) {
 	tests := []struct {
 		name       string
 		configFile string
@@ -1168,7 +1168,7 @@ func TestGFWReportHandler_LifecycleManagement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := &GFWReportHandler{
+			handler := &ReportHandler{
 				ConfigFile: tt.configFile,
 				Hook:       tt.hook,
 			}
@@ -1249,8 +1249,8 @@ func TestGFWReportHandler_LifecycleManagement(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_LifecycleIdempotency(t *testing.T) {
-	handler := &GFWReportHandler{}
+func TestReportHandler_LifecycleIdempotency(t *testing.T) {
+	handler := &ReportHandler{}
 
 	// Create a minimal context for testing
 	ctx := caddy.Context{
@@ -1290,8 +1290,8 @@ func TestGFWReportHandler_LifecycleIdempotency(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_LifecycleWithConcurrency(t *testing.T) {
-	handler := &GFWReportHandler{}
+func TestReportHandler_LifecycleWithConcurrency(t *testing.T) {
+	handler := &ReportHandler{}
 
 	// Create a minimal context for testing
 	ctx := caddy.Context{
@@ -1350,8 +1350,8 @@ func TestGFWReportHandler_LifecycleWithConcurrency(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_LifecycleWithContextCancellation(t *testing.T) {
-	handler := &GFWReportHandler{}
+func TestReportHandler_LifecycleWithContextCancellation(t *testing.T) {
+	handler := &ReportHandler{}
 
 	// Create a context that we can cancel
 	parentCtx, parentCancel := context.WithCancel(context.Background())
@@ -1394,9 +1394,9 @@ func TestGFWReportHandler_LifecycleWithContextCancellation(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_LifecycleErrorHandling(t *testing.T) {
+func TestReportHandler_LifecycleErrorHandling(t *testing.T) {
 	// Test provision with invalid config file
-	handler := &GFWReportHandler{
+	handler := &ReportHandler{
 		ConfigFile: "/nonexistent/path/to/patterns.txt",
 	}
 
@@ -1422,9 +1422,9 @@ func TestGFWReportHandler_LifecycleErrorHandling(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_LifecycleResourceManagement(t *testing.T) {
+func TestReportHandler_LifecycleResourceManagement(t *testing.T) {
 	// Test that resources are properly managed during lifecycle
-	handler := &GFWReportHandler{}
+	handler := &ReportHandler{}
 
 	ctx := caddy.Context{
 		Context: context.Background(),
@@ -1476,8 +1476,8 @@ func TestGFWReportHandler_LifecycleResourceManagement(t *testing.T) {
 	}
 }
 
-func TestGFWReportHandler_LifecycleThreadSafety(t *testing.T) {
-	handler := &GFWReportHandler{}
+func TestReportHandler_LifecycleThreadSafety(t *testing.T) {
+	handler := &ReportHandler{}
 
 	ctx := caddy.Context{
 		Context: context.Background(),

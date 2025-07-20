@@ -14,24 +14,12 @@
 }
 
 (COMCFG) {
-		encode {
-				zstd
-				gzip 6
-				match {
-						header Content-Type text*
-						header Content-Type application/json*
-						header Content-Type application/javascript*
-						header Content-Type application/xhtml+xml*
-						header Content-Type application/atom+xml*
-						header Content-Type application/rss+xml*
-						header Content-Type image/svg+xml*
-				}
-			}
+		encode zstd gzip
 }
 
 {
 		debug
-		order gfwreport before file_server
+		order report before file_server
 		default_sni errpage.ysicing.net
 }
 
@@ -39,7 +27,7 @@
     import COMCFG
     import LOG /tmp/caddy.log
     metrics /metrics
-    gfwreport {
+    report {
         file docker/report.txt
         remote https://www.baidu.com
     }

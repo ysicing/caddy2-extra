@@ -1,4 +1,4 @@
-package gfwreport
+package report
 
 import (
 	"context"
@@ -17,17 +17,17 @@ import (
 
 // Module registration is handled in plugin.go
 
-// Interface guards - 确保GFWReportHandler实现了所需的接口
+// Interface guards - 确保ReportHandler实现了所需的接口
 var (
-	_ caddy.Module                = (*GFWReportHandler)(nil)
-	_ caddy.Provisioner           = (*GFWReportHandler)(nil)
-	_ caddyfile.Unmarshaler       = (*GFWReportHandler)(nil)
-	_ caddyhttp.MiddlewareHandler = (*GFWReportHandler)(nil)
-	_ caddy.CleanerUpper          = (*GFWReportHandler)(nil)
+	_ caddy.Module                = (*ReportHandler)(nil)
+	_ caddy.Provisioner           = (*ReportHandler)(nil)
+	_ caddyfile.Unmarshaler       = (*ReportHandler)(nil)
+	_ caddyhttp.MiddlewareHandler = (*ReportHandler)(nil)
+	_ caddy.CleanerUpper          = (*ReportHandler)(nil)
 )
 
-// GFWReportHandler implements the main Caddy handler for the gfwreport plugin
-type GFWReportHandler struct {
+// ReportHandler implements the main Caddy handler for the report plugin
+type ReportHandler struct {
 	// Configuration file path for malicious patterns
 	ConfigFile string `json:"file,omitempty"`
 
@@ -56,21 +56,21 @@ type HookConfig struct {
 }
 
 // CaddyModule returns the Caddy module information
-func (*GFWReportHandler) CaddyModule() caddy.ModuleInfo {
+func (*ReportHandler) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
-		ID:  "http.handlers.gfwreport",
-		New: func() caddy.Module { return new(GFWReportHandler) },
+		ID:  "http.handlers.report",
+		New: func() caddy.Module { return new(ReportHandler) },
 	}
 }
 
 // Provision sets up the handler with the given context
-func (h *GFWReportHandler) Provision(ctx caddy.Context) error {
+func (h *ReportHandler) Provision(ctx caddy.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	// Initialize logger first
 	h.logger = ctx.Logger()
-	h.logger.Info("provisioning gfwreport handler",
+	h.logger.Info("provisioning report handler",
 		zap.String("version", "1.0.0"),
 		zap.String("config_file", h.ConfigFile))
 
@@ -127,7 +127,7 @@ func (h *GFWReportHandler) Provision(ctx caddy.Context) error {
 		return fmt.Errorf("failed to start request analyzer: %w", err)
 	}
 
-	h.logger.Info("gfwreport handler provisioned successfully",
+	h.logger.Info("report handler provisioned successfully",
 		zap.Bool("has_patterns", h.patternMgr != nil),
 		zap.Bool("has_reporter", h.reporter != nil),
 		zap.Bool("has_analyzer", h.analyzer != nil))
@@ -136,7 +136,7 @@ func (h *GFWReportHandler) Provision(ctx caddy.Context) error {
 }
 
 // ServeHTTP implements the HTTP handler interface
-func (h *GFWReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+func (h *ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
 	// Extract request information for analysis
 	requestInfo := ExtractRequestInfo(r)
 
@@ -154,7 +154,7 @@ func (h *GFWReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, nex
 }
 
 // Cleanup performs cleanup when the handler is being shut down
-func (h *GFWReportHandler) Cleanup() error {
+func (h *ReportHandler) Cleanup() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -162,9 +162,9 @@ func (h *GFWReportHandler) Cleanup() error {
 }
 
 // cleanup performs the actual cleanup work (internal method)
-func (h *GFWReportHandler) cleanup() error {
+func (h *ReportHandler) cleanup() error {
 	if h.logger != nil {
-		h.logger.Info("cleaning up gfwreport handler")
+		h.logger.Info("cleaning up report handler")
 	}
 
 	var lastErr error
@@ -200,10 +200,10 @@ func (h *GFWReportHandler) cleanup() error {
 
 	if h.logger != nil {
 		if lastErr != nil {
-			h.logger.Warn("gfwreport handler cleanup completed with errors",
+			h.logger.Warn("report handler cleanup completed with errors",
 				zap.Error(lastErr))
 		} else {
-			h.logger.Info("gfwreport handler cleanup completed successfully")
+			h.logger.Info("report handler cleanup completed successfully")
 		}
 	}
 
@@ -211,12 +211,12 @@ func (h *GFWReportHandler) cleanup() error {
 }
 
 // UnmarshalCaddyfile implements caddyfile.Unmarshaler
-func (h *GFWReportHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+func (h *ReportHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	for d.Next() {
 		// Parse arguments on the same line as the directive
 		args := d.RemainingArgs()
 		if len(args) > 0 {
-			return d.Errf("gfwreport directive does not accept arguments on the same line")
+			return d.Errf("report directive does not accept arguments on the same line")
 		}
 
 		// Parse block configuration
@@ -249,7 +249,7 @@ func (h *GFWReportHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 }
 
 // parseFileDirective parses the 'file' directive
-func (h *GFWReportHandler) parseFileDirective(d *caddyfile.Dispenser) error {
+func (h *ReportHandler) parseFileDirective(d *caddyfile.Dispenser) error {
 	if !d.NextArg() {
 		return d.ArgErr()
 	}
@@ -269,7 +269,7 @@ func (h *GFWReportHandler) parseFileDirective(d *caddyfile.Dispenser) error {
 }
 
 // parseHookDirective parses the 'hook' block directive
-func (h *GFWReportHandler) parseHookDirective(d *caddyfile.Dispenser) error {
+func (h *ReportHandler) parseHookDirective(d *caddyfile.Dispenser) error {
 	if h.Hook == nil {
 		h.Hook = &HookConfig{}
 	}
@@ -302,7 +302,7 @@ func (h *GFWReportHandler) parseHookDirective(d *caddyfile.Dispenser) error {
 }
 
 // parseRemoteHook parses the 'remote' hook configuration
-func (h *GFWReportHandler) parseRemoteHook(d *caddyfile.Dispenser) error {
+func (h *ReportHandler) parseRemoteHook(d *caddyfile.Dispenser) error {
 	if !d.NextArg() {
 		return d.ArgErr()
 	}
@@ -327,7 +327,7 @@ func (h *GFWReportHandler) parseRemoteHook(d *caddyfile.Dispenser) error {
 }
 
 // parseExecHook parses the 'exec' hook configuration
-func (h *GFWReportHandler) parseExecHook(d *caddyfile.Dispenser) error {
+func (h *ReportHandler) parseExecHook(d *caddyfile.Dispenser) error {
 	if !d.NextArg() {
 		return d.ArgErr()
 	}
@@ -347,7 +347,7 @@ func (h *GFWReportHandler) parseExecHook(d *caddyfile.Dispenser) error {
 }
 
 // parseLegacyRemoteDirective parses the legacy 'remote' directive for backward compatibility
-func (h *GFWReportHandler) parseLegacyRemoteDirective(d *caddyfile.Dispenser) error {
+func (h *ReportHandler) parseLegacyRemoteDirective(d *caddyfile.Dispenser) error {
 	if !d.NextArg() {
 		return d.ArgErr()
 	}
@@ -377,10 +377,10 @@ func (h *GFWReportHandler) parseLegacyRemoteDirective(d *caddyfile.Dispenser) er
 }
 
 // validateConfig validates the parsed configuration
-func (h *GFWReportHandler) validateConfig(d *caddyfile.Dispenser) error {
+func (h *ReportHandler) validateConfig(d *caddyfile.Dispenser) error {
 	// Check if at least one configuration is provided
 	if h.ConfigFile == "" && h.Hook == nil {
-		return d.Errf("gfwreport requires at least a file path or hook configuration")
+		return d.Errf("report requires at least a file path or hook configuration")
 	}
 
 	// Validate hook configuration if present
@@ -395,7 +395,7 @@ func (h *GFWReportHandler) validateConfig(d *caddyfile.Dispenser) error {
 
 // ParseCaddyfile unmarshals tokens from h into a new Middleware.
 func ParseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
-	var handler GFWReportHandler
+	var handler ReportHandler
 	err := handler.UnmarshalCaddyfile(h.Dispenser)
 	return &handler, err
 }

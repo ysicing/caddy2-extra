@@ -1,4 +1,4 @@
-package gfwreport
+package report
 
 import (
 	"bytes"
@@ -112,7 +112,7 @@ func (er *EventReporter) sendHTTPReport(event *ThreatEvent) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "caddy-gfwreport/1.0.0")
+	req.Header.Set("User-Agent", "caddy-report/1.0.0")
 
 	// Add timeout context
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultHTTPTimeout)

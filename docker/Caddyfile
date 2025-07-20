@@ -1,0 +1,33 @@
+(LOG) {
+    log {
+        output file /var/log/caddy.log {
+            roll_size 1mb
+		    roll_keep 5
+		    roll_keep_for 1h
+        }
+        format console {
+            time_format "iso8601"
+        }
+    }
+}
+
+(COMCFG) {
+    encode zstd gzip
+}
+
+{
+    debug
+}
+
+:80 {
+    import COMCFG
+    import LOG
+    metrics /metrics
+    gfwreport {
+        file report.txt
+        remote http://www.baidu.com
+    }
+    file_server {
+        root /etc/caddy/example/allow
+    }
+}

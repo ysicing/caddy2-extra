@@ -1,0 +1,54 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  gofmt:
+    cmds:
+      - go install golang.org/x/tools/cmd/goimports@latest
+      - gofmt -s -w .
+      - goimports -w .
+
+  govulncheck:
+    desc: vulnerability detection
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck@v1.1.1
+      - govulncheck ./...
+
+  golint:
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+      - golangci-lint run -v ./...
+
+  gci:
+    cmds:
+      - go install github.com/daixiang0/gci@v0.13.1
+      - gci write --skip-generated --custom-order -s standard -s "prefix(github.com/ysicing/caddy2-extra)" -s default -s blank -s dot .
+
+  fmt:
+    desc: format code
+    run: once
+    cmds:
+      - task: gofmt
+      - task: gci
+      - task: govulncheck
+
+  build:
+    cmds:
+      - go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+      - xcaddy build
+          --with github.com/ysicing/caddy2-geocn=../caddy2-extra
+          --with github.com/caddy-dns/cloudflare
+          --with github.com/caddy-dns/tencentcloud
+          --with github.com/caddy-dns/alidns
+      - ./caddy list-modules
+
+  run:
+    cmds:
+      - task: build
+      - ./caddy run --config ./Caddyfile.local --adapter caddyfile
+
+  default:
+    cmds:
+      - rm -rf ./caddy
+      - task: build

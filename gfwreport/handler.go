@@ -1,0 +1,467 @@
+package gfwreport
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+
+	"github.com/caddyserver/caddy/v2"
+	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/caddyserver/caddy/v2/caddyconfig/httpcaddyfile"
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"go.uber.org/zap"
+)
+
+// Module registration is handled in plugin.go
+
+// GFWReportHandler implements the main Caddy handler for the gfwreport plugin
+type GFWReportHandler struct {
+	// Configuration file path for malicious patterns
+	ConfigFile string `json:"file,omitempty"`
+	
+	// Hook configuration for event reporting
+	Hook *HookConfig `json:"hook,omitempty"`
+	
+	// Internal components
+	analyzer     *RequestAnalyzer
+	reporter     *EventReporter
+	patternMgr   *PatternManager
+	logger       *zap.Logger
+	errorHandler *ErrorHandler
+	
+	// Lifecycle management
+	ctx    context.Context
+	cancel context.CancelFunc
+	mu     sync.RWMutex
+}
+
+// HookConfig defines the configuration for event reporting hooks
+type HookConfig struct {
+	// HTTP webhook URL for remote reporting
+	Remote string `json:"remote,omitempty"`
+	
+	// Shell command to execute for local reporting
+	Exec string `json:"exec,omitempty"`
+}
+
+// CaddyModule returns the Caddy module information
+func (GFWReportHandler) CaddyModule() caddy.ModuleInfo {
+	return caddy.ModuleInfo{
+		ID:  "http.handlers.gfwreport",
+		New: func() caddy.Module { return new(GFWReportHandler) },
+	}
+}
+
+// Provision sets up the handler with the given context
+func (h *GFWReportHandler) Provision(ctx caddy.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
+	// Initialize logger first
+	h.logger = ctx.Logger(h)
+	h.logger.Info("provisioning gfwreport handler", 
+		zap.String("version", "1.0.0"),
+		zap.String("config_file", h.ConfigFile))
+	
+	// Initialize error handler
+	h.errorHandler = NewErrorHandler(h.logger)
+	
+	// Create context for lifecycle management
+	h.ctx, h.cancel = context.WithCancel(ctx)
+	
+	// Initialize pattern manager
+	h.patternMgr = NewPatternManager(h.logger)
+	
+	// Load patterns if config file is specified
+	if h.ConfigFile != "" {
+		h.logger.Info("loading pattern file", zap.String("file", h.ConfigFile))
+		
+		err := h.errorHandler.HandleWithGracefulDegradation(
+			h.ctx,
+			func() error {
+				return h.patternMgr.LoadFromFile(h.ConfigFile)
+			},
+			func() error {
+				h.logger.Warn("using empty pattern set as fallback", 
+					zap.String("file", h.ConfigFile))
+				return nil
+			},
+			"load_pattern_file")
+		
+		if err != nil {
+			h.logger.Warn("failed to load pattern file with graceful degradation", 
+				zap.String("file", h.ConfigFile),
+				zap.Error(err))
+			// Continue with empty patterns rather than failing
+		} else {
+			ipCount, pathCount, uaCount := h.patternMgr.GetPatternCounts()
+			h.logger.Info("pattern file processed", 
+				zap.String("file", h.ConfigFile),
+				zap.Int("ip_patterns", ipCount),
+				zap.Int("path_patterns", pathCount),
+				zap.Int("ua_patterns", uaCount))
+		}
+	} else {
+		h.logger.Info("no pattern file specified, using empty pattern set")
+	}
+	
+	// Initialize event reporter
+	h.reporter = NewEventReporter(h.Hook, h.logger)
+	
+	// Log hook configuration
+	if h.Hook != nil {
+		if h.Hook.Remote != "" {
+			h.logger.Info("HTTP webhook configured", 
+				zap.String("url", h.Hook.Remote))
+		}
+		if h.Hook.Exec != "" {
+			h.logger.Info("exec command configured", 
+				zap.String("command", h.Hook.Exec))
+		}
+	} else {
+		h.logger.Info("no hooks configured, threats will only be logged")
+	}
+	
+	// Initialize request analyzer
+	h.analyzer = NewRequestAnalyzer(h.patternMgr, h.reporter, h.logger)
+	
+	// Start the analyzer with proper error handling
+	err := h.errorHandler.HandleWithRetry(h.ctx, func() error {
+		return h.analyzer.Start(h.ctx)
+	}, "start_request_analyzer")
+	
+	if err != nil {
+		h.logger.Error("failed to start request analyzer after retries", 
+			zap.Error(err))
+		// Clean up partially initialized components
+		h.cleanup()
+		return fmt.Errorf("failed to start request analyzer: %w", err)
+	}
+	
+	h.logger.Info("gfwreport handler provisioned successfully",
+		zap.Bool("has_patterns", h.patternMgr != nil),
+		zap.Bool("has_reporter", h.reporter != nil),
+		zap.Bool("has_analyzer", h.analyzer != nil))
+	
+	return nil
+}
+
+// ServeHTTP implements the HTTP handler interface
+func (h *GFWReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	// Use error handler to recover from any panics
+	return h.errorHandler.RecoverFromPanicWithError(func() error {
+		// Extract request information for analysis
+		requestInfo := ExtractRequestInfo(r)
+		
+		h.logger.Debug("processing request",
+			zap.String("ip", requestInfo.IP.String()),
+			zap.String("path", requestInfo.Path),
+			zap.String("method", requestInfo.Method),
+			zap.String("user_agent", requestInfo.UserAgent))
+		
+		// Submit for asynchronous analysis
+		h.analyzer.AnalyzeRequest(requestInfo)
+		
+		// Continue to next handler immediately
+		return next.ServeHTTP(w, r)
+	}, "serve_http")
+}
+
+// Cleanup performs cleanup when the handler is being shut down
+func (h *GFWReportHandler) Cleanup() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
+	return h.cleanup()
+}
+
+// cleanup performs the actual cleanup work (internal method)
+func (h *GFWReportHandler) cleanup() error {
+	if h.logger != nil {
+		h.logger.Info("cleaning up gfwreport handler")
+	}
+	
+	var lastErr error
+	
+	// Cancel context to signal shutdown
+	if h.cancel != nil {
+		h.cancel()
+		h.cancel = nil
+	}
+	
+	// Stop the analyzer gracefully with error handling
+	if h.analyzer != nil {
+		if h.errorHandler != nil {
+			// Use error handler if available
+			err := h.errorHandler.HandleWithRetry(context.Background(), func() error {
+				return h.analyzer.Stop()
+			}, "stop_request_analyzer")
+			
+			if err != nil {
+				if h.logger != nil {
+					h.logger.Error("failed to stop request analyzer after retries", 
+						zap.Error(err))
+				}
+				lastErr = err
+			}
+		} else {
+			// Fallback if error handler is not available
+			if err := h.analyzer.Stop(); err != nil {
+				if h.logger != nil {
+					h.logger.Error("failed to stop request analyzer", 
+						zap.Error(err))
+				}
+				lastErr = err
+			}
+		}
+		h.analyzer = nil
+	}
+	
+	// Log component cleanup
+	if h.logger != nil {
+		h.logger.Debug("cleaning up components",
+			zap.Bool("has_reporter", h.reporter != nil),
+			zap.Bool("has_pattern_manager", h.patternMgr != nil))
+	}
+	
+	// Clean up other components
+	h.reporter = nil
+	h.patternMgr = nil
+	h.ctx = nil
+	
+	if h.logger != nil {
+		if lastErr != nil {
+			h.logger.Warn("gfwreport handler cleanup completed with errors", 
+				zap.Error(lastErr))
+		} else {
+			h.logger.Info("gfwreport handler cleanup completed successfully")
+		}
+	}
+	
+	return lastErr
+}
+
+// UnmarshalCaddyfile implements caddyfile.Unmarshaler
+func (h *GFWReportHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
+	for d.Next() {
+		// Parse arguments on the same line as the directive
+		args := d.RemainingArgs()
+		if len(args) > 0 {
+			return d.Errf("gfwreport directive does not accept arguments on the same line")
+		}
+		
+		// Parse block configuration
+		for d.NextBlock(0) {
+			switch d.Val() {
+			case "file":
+				if err := h.parseFileDirective(d); err != nil {
+					return err
+				}
+				
+			case "hook":
+				if err := h.parseHookDirective(d); err != nil {
+					return err
+				}
+				
+			// Support legacy 'remote' directive for backward compatibility
+			case "remote":
+				if err := h.parseLegacyRemoteDirective(d); err != nil {
+					return err
+				}
+				
+			default:
+				return d.Errf("unknown directive: %s", d.Val())
+			}
+		}
+	}
+	
+	// Validate configuration after parsing
+	return h.validateConfig(d)
+}
+
+// parseFileDirective parses the 'file' directive
+func (h *GFWReportHandler) parseFileDirective(d *caddyfile.Dispenser) error {
+	if !d.NextArg() {
+		return d.ArgErr()
+	}
+	
+	filePath := d.Val()
+	if filePath == "" {
+		return d.Errf("file path cannot be empty")
+	}
+	
+	// Check for additional arguments
+	if d.NextArg() {
+		return d.Errf("file directive accepts only one argument")
+	}
+	
+	h.ConfigFile = filePath
+	return nil
+}
+
+// parseHookDirective parses the 'hook' block directive
+func (h *GFWReportHandler) parseHookDirective(d *caddyfile.Dispenser) error {
+	if h.Hook == nil {
+		h.Hook = &HookConfig{}
+	}
+	
+	// Check if there are arguments on the same line
+	args := d.RemainingArgs()
+	if len(args) > 0 {
+		return d.Errf("hook directive does not accept arguments on the same line")
+	}
+	
+	// Parse hook block
+	for d.NextBlock(1) {
+		switch d.Val() {
+		case "remote":
+			if err := h.parseRemoteHook(d); err != nil {
+				return err
+			}
+			
+		case "exec":
+			if err := h.parseExecHook(d); err != nil {
+				return err
+			}
+			
+		default:
+			return d.Errf("unknown hook directive: %s", d.Val())
+		}
+	}
+	
+	return nil
+}
+
+// parseRemoteHook parses the 'remote' hook configuration
+func (h *GFWReportHandler) parseRemoteHook(d *caddyfile.Dispenser) error {
+	if !d.NextArg() {
+		return d.ArgErr()
+	}
+	
+	remoteURL := d.Val()
+	if remoteURL == "" {
+		return d.Errf("remote URL cannot be empty")
+	}
+	
+	// Basic URL validation
+	if !isValidURL(remoteURL) {
+		return d.Errf("invalid remote URL: %s", remoteURL)
+	}
+	
+	// Check for additional arguments
+	if d.NextArg() {
+		return d.Errf("remote directive accepts only one argument")
+	}
+	
+	h.Hook.Remote = remoteURL
+	return nil
+}
+
+// parseExecHook parses the 'exec' hook configuration
+func (h *GFWReportHandler) parseExecHook(d *caddyfile.Dispenser) error {
+	if !d.NextArg() {
+		return d.ArgErr()
+	}
+	
+	execCmd := d.Val()
+	if execCmd == "" {
+		return d.Errf("exec command cannot be empty")
+	}
+	
+	// Check for additional arguments
+	if d.NextArg() {
+		return d.Errf("exec directive accepts only one argument")
+	}
+	
+	h.Hook.Exec = execCmd
+	return nil
+}
+
+// parseLegacyRemoteDirective parses the legacy 'remote' directive for backward compatibility
+func (h *GFWReportHandler) parseLegacyRemoteDirective(d *caddyfile.Dispenser) error {
+	if !d.NextArg() {
+		return d.ArgErr()
+	}
+	
+	remoteURL := d.Val()
+	if remoteURL == "" {
+		return d.Errf("remote URL cannot be empty")
+	}
+	
+	// Basic URL validation
+	if !isValidURL(remoteURL) {
+		return d.Errf("invalid remote URL: %s", remoteURL)
+	}
+	
+	// Check for additional arguments
+	if d.NextArg() {
+		return d.Errf("remote directive accepts only one argument")
+	}
+	
+	// Initialize hook config if not exists
+	if h.Hook == nil {
+		h.Hook = &HookConfig{}
+	}
+	
+	h.Hook.Remote = remoteURL
+	return nil
+}
+
+// validateConfig validates the parsed configuration
+func (h *GFWReportHandler) validateConfig(d *caddyfile.Dispenser) error {
+	// Check if at least one configuration is provided
+	if h.ConfigFile == "" && h.Hook == nil {
+		return d.Errf("gfwreport requires at least a file path or hook configuration")
+	}
+	
+	// Validate hook configuration if present
+	if h.Hook != nil {
+		if h.Hook.Remote == "" && h.Hook.Exec == "" {
+			return d.Errf("hook block requires at least one of 'remote' or 'exec' directives")
+		}
+	}
+	
+	return nil
+}
+
+// parseCaddyfile unmarshals tokens from h into a new Middleware.
+func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
+	var handler GFWReportHandler
+	err := handler.UnmarshalCaddyfile(h.Dispenser)
+	return &handler, err
+}
+
+// isValidURL validates if the given string is a valid URL
+func isValidURL(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	
+	// Check if scheme is present and valid
+	if parsedURL.Scheme == "" {
+		return false
+	}
+	
+	// Only allow http and https schemes for security
+	scheme := strings.ToLower(parsedURL.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return false
+	}
+	
+	// Check if host is present
+	if parsedURL.Host == "" {
+		return false
+	}
+	
+	return true
+}
+
+// Caddyfile directive registration is handled in plugin.go

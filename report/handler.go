@@ -34,6 +34,9 @@ type ReportHandler struct {
 	// Hook configuration for event reporting
 	Hook *HookConfig `json:"hook,omitempty"`
 
+	// Send all request logs, not just threats
+	SendLog bool `json:"sendlog,omitempty"`
+
 	// Internal components
 	analyzer   *RequestAnalyzer
 	reporter   *EventReporter
@@ -51,7 +54,7 @@ type HookConfig struct {
 	// HTTP webhook URL for remote reporting
 	Remote string `json:"remote,omitempty"`
 
-	// Shell command to execute for local reporting
+	// Shell command to execute for IP banning (only for malicious IPs)
 	Exec string `json:"exec,omitempty"`
 }
 
@@ -72,7 +75,8 @@ func (h *ReportHandler) Provision(ctx caddy.Context) error {
 	h.logger = ctx.Logger()
 	h.logger.Info("provisioning report handler",
 		zap.String("version", "1.0.0"),
-		zap.String("config_file", h.ConfigFile))
+		zap.String("config_file", h.ConfigFile),
+		zap.Bool("sendlog", h.SendLog))
 
 	// Create context for lifecycle management
 	h.ctx, h.cancel = context.WithCancel(ctx)
@@ -110,7 +114,7 @@ func (h *ReportHandler) Provision(ctx caddy.Context) error {
 				zap.String("url", h.Hook.Remote))
 		}
 		if h.Hook.Exec != "" {
-			h.logger.Info("exec command configured",
+			h.logger.Info("banip command configured",
 				zap.String("command", h.Hook.Exec))
 		}
 	} else {
@@ -119,6 +123,7 @@ func (h *ReportHandler) Provision(ctx caddy.Context) error {
 
 	// Initialize request analyzer
 	h.analyzer = NewRequestAnalyzer(h.patternMgr, h.reporter, h.logger)
+	h.analyzer.SetSendAllLogs(h.SendLog)
 
 	// Start the analyzer
 	if err := h.analyzer.Start(h.ctx); err != nil {
@@ -229,6 +234,11 @@ func (h *ReportHandler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 
 			case "hook":
 				if err := h.parseHookDirective(d); err != nil {
+					return err
+				}
+
+			case "sendlog":
+				if err := h.parseSendLogDirective(d); err != nil {
 					return err
 				}
 
@@ -376,11 +386,28 @@ func (h *ReportHandler) parseLegacyRemoteDirective(d *caddyfile.Dispenser) error
 	return nil
 }
 
+// parseSendLogDirective parses the 'sendlog' directive
+func (h *ReportHandler) parseSendLogDirective(d *caddyfile.Dispenser) error {
+	// sendlog directive doesn't take any arguments
+	args := d.RemainingArgs()
+	if len(args) > 0 {
+		return d.Errf("sendlog directive does not accept arguments")
+	}
+
+	h.SendLog = true
+	return nil
+}
+
 // validateConfig validates the parsed configuration
 func (h *ReportHandler) validateConfig(d *caddyfile.Dispenser) error {
 	// Check if at least one configuration is provided
-	if h.ConfigFile == "" && h.Hook == nil {
-		return d.Errf("report requires at least a file path or hook configuration")
+	if h.ConfigFile == "" && h.Hook == nil && !h.SendLog {
+		return d.Errf("report requires at least a file path, hook configuration, or sendlog directive")
+	}
+
+	// If sendlog is enabled, hook configuration is required
+	if h.SendLog && h.Hook == nil {
+		return d.Errf("sendlog requires hook configuration to send request logs")
 	}
 
 	// Validate hook configuration if present

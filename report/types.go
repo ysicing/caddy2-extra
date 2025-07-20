@@ -42,6 +42,7 @@ const (
 	ThreatTypeIP        = "malicious_ip"
 	ThreatTypePath      = "malicious_path"
 	ThreatTypeUserAgent = "malicious_user_agent"
+	ThreatTypeNormal    = "normal_request"
 )
 
 // GetClientIP extracts the real client IP from the HTTP request

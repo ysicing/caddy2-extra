@@ -20,6 +20,7 @@
 - **异步处理**: 威胁检测不阻塞正常 HTTP 流量
 - **工作池架构**: 多协程并发处理，支持高并发场景
 - **队列管理**: 智能缓冲机制，避免内存溢出
+- **SendLog功能**: 可选择发送所有请求日志，不仅限于威胁事件
 
 ### 📊 灵活的威胁报告
 - **HTTP Webhook**: 实时推送威胁事件到外部系统
@@ -141,13 +142,16 @@ example.com {
         # 威胁模式文件路径
         file /etc/caddy/patterns/production-threats.txt
         
+        # 启用发送所有请求日志（可选）
+        sendlog
+        
         # 威胁事件报告配置
         hook {
             # HTTP webhook URL
             remote https://siem.company.com/api/v1/threats
             
-            # 本地处理脚本
-            exec /usr/local/bin/process-threat.sh
+            # IP封禁命令（仅对恶意IP生效）
+            exec /usr/local/bin/banip.sh
         }
     }
     
@@ -194,6 +198,52 @@ PATH: /wp-admin/.*
 PATH: .*\.\./.*
 ```
 
+### SendLog 配置
+
+SendLog 功能允许您发送所有HTTP请求日志，而不仅仅是威胁事件：
+
+```caddyfile
+{
+    order report before file_server
+}
+
+# 开发环境 - 记录所有请求
+localhost:8080 {
+    report {
+        # 可选：威胁模式文件
+        file /etc/caddy/patterns/basic-threats.txt
+        
+        # 启用发送所有请求日志
+        sendlog
+        
+        # 必需：hook配置（sendlog需要配置接收器）
+        hook {
+            # 发送到监控系统
+            remote https://monitor.company.com/api/v1/logs
+            
+            # IP封禁命令（仅对恶意IP生效）
+            exec /usr/local/bin/banip.sh
+        }
+    }
+    
+    file_server
+}
+
+# 生产环境 - 仅威胁事件
+production.com {
+         report {
+         file /etc/caddy/patterns/production-threats.txt
+         hook {
+             remote https://siem.company.com/api/v1/threats
+             # 自动封禁恶意IP
+             exec /usr/local/bin/banip.sh
+         }
+     }
+    
+    reverse_proxy backend:3000
+}
+```
+
 ## 🔗 集成示例
 
 ### SIEM 系统集成
@@ -215,41 +265,55 @@ PATH: .*\.\./.*
 }
 ```
 
-### 自定义威胁处理脚本
+当启用 `sendlog` 功能时，正常请求也会被发送：
 
-创建处理脚本 `/usr/local/bin/process-threat.sh`：
+```json
+{
+  "ip": "192.168.1.100",
+  "path": "/api/users",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+  "method": "GET",
+  "timestamp": "2024-07-20T10:30:00Z",
+  "threat_type": "normal_request",
+  "headers": {
+    "host": "example.com",
+    "authorization": "Bearer eyJ..."
+  }
+}
+```
+
+### IP自动封禁功能
+
+`exec` 命令专门用于封禁恶意IP地址，仅在检测到 `malicious_ip` 威胁时执行：
 
 ```bash
 #!/bin/bash
+# /usr/local/bin/banip.sh
 
-# 威胁处理脚本示例
-IP="$1"
-PATH="$2"
-USER_AGENT="$3"
-METHOD="$4"
-THREAT_TYPE="$5"
-TIMESTAMP="$6"
+MALICIOUS_IP="$1"  # 仅接收IP地址参数
 
-echo "$(date): 检测到威胁 - IP: $IP, 类型: $THREAT_TYPE" >> /var/log/threats.log
+# 记录封禁操作
+echo "$(date): 封禁恶意IP: $MALICIOUS_IP" >> /var/log/banip.log
 
-# 根据威胁类型执行相应操作
-case "$THREAT_TYPE" in
-    "malicious_ip")
-        # 阻断恶意 IP
-        iptables -A INPUT -s "$IP" -j DROP
-        echo "已阻断恶意IP: $IP"
-        ;;
-    "malicious_path")
-        # 发送告警邮件
-        echo "检测到路径威胁: $PATH from $IP" | mail -s "安全警报" admin@company.com
-        ;;
-    "malicious_user_agent")
-        # 记录到威胁情报系统
-        curl -X POST https://threat-intel.company.com/api/ua \
-             -d "{\"ua\":\"$USER_AGENT\",\"ip\":\"$IP\"}"
-        ;;
-esac
+# 使用iptables封禁IP
+iptables -I INPUT -s "$MALICIOUS_IP" -j DROP
+
+# 或者使用ipset（推荐，性能更好）
+# ipset add banip_blacklist "$MALICIOUS_IP" timeout 3600
+
+# 发送通知
+curl -X POST https://alerts.company.com/webhook \
+     -H "Content-Type: application/json" \
+     -d "{\"action\":\"ban_ip\",\"ip\":\"$MALICIOUS_IP\",\"timestamp\":\"$(date -Iseconds)\"}"
+
+echo "IP $MALICIOUS_IP 已被成功封禁"
 ```
+
+**重要特性：**
+- ✅ 仅对 `malicious_ip` 威胁类型执行
+- ✅ 只接收IP地址作为参数
+- ✅ 支持iptables和ipset封禁
+- ✅ 自动通知和日志记录
 
 ### Docker Compose 部署
 

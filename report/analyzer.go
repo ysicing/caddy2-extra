@@ -18,11 +18,12 @@ const (
 
 // RequestAnalyzer handles asynchronous analysis of HTTP requests
 type RequestAnalyzer struct {
-	queue      chan *RequestInfo
-	patternMgr *PatternManager
-	reporter   *EventReporter
-	workers    int
-	logger     *zap.Logger
+	queue       chan *RequestInfo
+	patternMgr  *PatternManager
+	reporter    *EventReporter
+	workers     int
+	logger      *zap.Logger
+	sendAllLogs bool // Send all request logs, not just threats
 
 	// Lifecycle management
 	ctx      context.Context
@@ -34,12 +35,19 @@ type RequestAnalyzer struct {
 // NewRequestAnalyzer creates a new RequestAnalyzer instance
 func NewRequestAnalyzer(patternMgr *PatternManager, reporter *EventReporter, logger *zap.Logger) *RequestAnalyzer {
 	return &RequestAnalyzer{
-		queue:      make(chan *RequestInfo, DefaultQueueSize),
-		patternMgr: patternMgr,
-		reporter:   reporter,
-		workers:    DefaultWorkerCount,
-		logger:     logger,
+		queue:       make(chan *RequestInfo, DefaultQueueSize),
+		patternMgr:  patternMgr,
+		reporter:    reporter,
+		workers:     DefaultWorkerCount,
+		logger:      logger,
+		sendAllLogs: false,
 	}
+}
+
+// SetSendAllLogs configures whether to send all request logs or only threats
+func (ra *RequestAnalyzer) SetSendAllLogs(sendAll bool) {
+	ra.sendAllLogs = sendAll
+	ra.logger.Info("send all logs configuration updated", zap.Bool("send_all_logs", sendAll))
 }
 
 // Start begins the asynchronous request analysis process
@@ -200,7 +208,7 @@ func (ra *RequestAnalyzer) analyzeRequestForThreats(info *RequestInfo) {
 		return
 	}
 
-	// No threats detected - log as debug
+	// No threats detected
 	ra.logger.Debug("request analyzed - no threats detected",
 		zap.String("ip", info.IP.String()),
 		zap.String("path", info.Path),
@@ -208,4 +216,17 @@ func (ra *RequestAnalyzer) analyzeRequestForThreats(info *RequestInfo) {
 		zap.String("user_agent", info.UserAgent),
 		zap.Duration("analysis_duration", time.Since(startTime)),
 		zap.String("result", "clean"))
+
+	// If sendAllLogs is enabled, send normal request as well
+	if ra.sendAllLogs {
+		ra.logger.Debug("sending normal request log",
+			zap.String("ip", info.IP.String()),
+			zap.String("path", info.Path),
+			zap.String("method", info.Method),
+			zap.String("user_agent", info.UserAgent))
+
+		// Create a "normal" event for logging purposes
+		event := NewThreatEvent(info, ThreatTypeNormal)
+		ra.reporter.ReportThreat(event)
+	}
 }

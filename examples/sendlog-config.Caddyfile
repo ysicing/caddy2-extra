@@ -1,0 +1,97 @@
+# GFWReport Plugin - SendLog 配置示例
+# 发送所有请求日志，不仅仅是威胁事件
+
+{
+    # 设置插件在中间件链中的执行顺序
+    order report before file_server
+
+    # 启用调试模式查看详细日志
+    debug
+
+    # 全局日志配置
+    log {
+        level DEBUG
+        format console
+    }
+}
+
+# 开发环境 - 发送所有请求日志
+localhost:8080 {
+    # 启用详细日志
+    log {
+        output file /tmp/caddy-sendlog.log {
+            roll_size 5mb
+            roll_keep 3
+        }
+        format json {
+            time_format "2006-01-02T15:04:05.000Z07:00"
+        }
+        level DEBUG
+    }
+
+    # GFWReport 配置 - 启用发送所有日志
+    report {
+        # 威胁模式文件（可选，没有文件也能工作）
+        file patterns/basic-threats.txt
+
+        # 启用发送所有请求日志
+        sendlog
+
+                # 配置webhook接收器
+        hook {
+            # 发送到本地测试服务器
+            remote http://localhost:9090/webhook
+
+            # 配置IP封禁命令（仅对恶意IP生效）
+            exec /usr/local/bin/banip.sh
+        }
+    }
+
+    # 启用压缩
+    encode gzip
+
+    # 健康检查端点
+    respond /health "OK - SendLog Active" 200
+
+    # 测试端点
+    respond /api/test "Test API endpoint" 200 {
+        header Content-Type application/json
+    }
+
+    # 静态文件服务
+    file_server {
+        root /var/www/html
+        index index.html
+    }
+}
+
+# 监控端点 - 仅发送威胁事件
+localhost:8081 {
+    log {
+        output file /tmp/caddy-monitor.log
+        format json
+        level INFO
+    }
+
+    # 传统模式 - 仅威胁检测
+    report {
+        file patterns/basic-threats.txt
+        hook {
+            remote http://localhost:9090/threats-only
+            # IP封禁仅对恶意IP威胁生效
+            exec /usr/local/bin/banip.sh
+        }
+    }
+
+    respond /monitor "Monitor endpoint - threats only" 200
+
+    file_server {
+        root /var/www/monitor
+    }
+}
+
+# Webhook 测试服务器配置（参考）
+# localhost:9090 {
+#     respond /webhook "All requests received" 200
+#     respond /threats-only "Threats only received" 200
+# }

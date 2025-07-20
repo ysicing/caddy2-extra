@@ -31,6 +31,8 @@
         file docker/report.txt
         remote https://www.baidu.com
     }
+		sendlog https://www.baidu.com
     file_server {
         root ./docker
+		}
 }

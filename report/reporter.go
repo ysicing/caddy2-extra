@@ -69,21 +69,24 @@ func (er *EventReporter) ReportThreat(event *ThreatEvent) {
 		}
 	}
 
-	// Try shell command if configured
-	if er.config.Exec != "" {
-		er.logger.Debug("attempting shell command execution",
+	// Try shell command if configured (only for IP-based threats for banip functionality)
+	if er.config.Exec != "" && event.ThreatType == ThreatTypeIP {
+		er.logger.Debug("attempting banip command execution",
 			zap.String("command", er.config.Exec),
-			zap.String("threat_type", event.ThreatType))
+			zap.String("threat_type", event.ThreatType),
+			zap.String("ip", event.IP))
 
-		if err := er.executeCommand(event); err != nil {
-			er.logger.Error("shell command execution failed",
+		if err := er.executeBanIPCommand(event); err != nil {
+			er.logger.Error("banip command execution failed",
 				zap.String("command", er.config.Exec),
 				zap.String("threat_type", event.ThreatType),
+				zap.String("ip", event.IP),
 				zap.Error(err))
 		} else {
-			er.logger.Debug("shell command executed completed",
+			er.logger.Debug("banip command executed completed",
 				zap.String("command", er.config.Exec),
-				zap.String("threat_type", event.ThreatType))
+				zap.String("threat_type", event.ThreatType),
+				zap.String("ip", event.IP))
 		}
 	}
 }
@@ -139,25 +142,19 @@ func (er *EventReporter) sendHTTPReport(event *ThreatEvent) error {
 	return nil
 }
 
-// executeCommand executes a single shell command
-func (er *EventReporter) executeCommand(event *ThreatEvent) error {
+// executeBanIPCommand executes a banip command for malicious IPs
+func (er *EventReporter) executeBanIPCommand(event *ThreatEvent) error {
 	// Create command with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultHTTPTimeout)
 	defer cancel()
 
-	// Prepare command arguments with event data
-	cmdStr := fmt.Sprintf("%s '%s' '%s' '%s' '%s' '%s'",
-		er.config.Exec,
-		event.IP,
-		event.Path,
-		event.UserAgent,
-		event.Method,
-		event.ThreatType)
+	// For banip functionality, only pass the IP address as parameter
+	cmdStr := fmt.Sprintf("%s %s", er.config.Exec, event.IP)
 
-	er.logger.Debug("executing shell command",
+	er.logger.Debug("executing banip command",
 		zap.String("command", er.config.Exec),
 		zap.String("full_command", cmdStr),
-		zap.String("threat_type", event.ThreatType))
+		zap.String("ip", event.IP))
 
 	args := []string{"-c", cmdStr}
 	cmd := exec.CommandContext(ctx, "/bin/sh", args...)
@@ -165,13 +162,13 @@ func (er *EventReporter) executeCommand(event *ThreatEvent) error {
 	// Execute command
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("command execution failed: %w, output: %s", err, string(output))
+		return fmt.Errorf("banip command execution failed: %w, output: %s", err, string(output))
 	}
 
-	er.logger.Debug("command executed completed",
+	er.logger.Info("IP banned successfully",
 		zap.String("command", er.config.Exec),
-		zap.String("output", string(output)),
-		zap.Int("output_length", len(output)))
+		zap.String("ip", event.IP),
+		zap.String("output", string(output)))
 
 	return nil
 }

@@ -1,17 +1,38 @@
-# GFWReport Plugin Examples and Documentation
+# GFWReport Plugin Examples
 
-This directory contains comprehensive examples and documentation for the GFWReport Caddy plugin, which provides asynchronous threat detection and reporting capabilities.
+This directory contains comprehensive examples and configurations for the GFWReport Caddy plugin.
+
+## Directory Structure
+
+```
+examples/
+├── README.md                    # This file
+├── basic-config.Caddyfile      # Basic configuration example
+├── advanced-config.Caddyfile   # Advanced production configuration
+├── Caddyfile                   # Default configuration
+├── docker-compose.yml          # Docker Compose setup
+├── Dockerfile                  # Docker image build
+├── webhook-server.py           # Test webhook server
+├── patterns/                   # Pattern file examples
+│   ├── basic-threats.txt       # Basic threat patterns
+│   ├── production-threats.txt  # Production threat patterns
+│   └── custom-patterns.txt     # Custom pattern examples
+└── scripts/                    # Processing scripts
+    ├── process-threat.sh       # Basic threat processing
+    ├── notify-slack.sh         # Slack notification
+    └── log-to-siem.sh         # SIEM integration
+```
 
 ## Overview
 
-The GFWReport plugin analyzes HTTP requests asynchronously to detect malicious patterns including:
-- Malicious IP addresses (CIDR blocks)
-- Suspicious request paths (regex patterns)
-- Malicious User-Agent strings
+The GFWReport plugin provides real-time threat detection for Caddy web servers by analyzing HTTP requests asynchronously against configurable patterns for:
+- **IP addresses** (CIDR blocks)
+- **Request paths** (regex patterns)  
+- **User-Agent strings** (wildcard patterns)
 
 When threats are detected, the plugin can report them via:
-- HTTP webhooks to remote systems
-- Shell command execution for local processing
+- **HTTP webhooks** to remote systems
+- **Shell command execution** for local processing
 
 ## Quick Start
 
@@ -304,42 +325,77 @@ volumes:
 
 ## Testing
 
-### 1. Basic Functionality Test
+### 1. Start Test Environment
 
-Start Caddy with the basic configuration:
 ```bash
+# Using Docker Compose
+docker-compose up -d
+
+# Or directly with Caddy
 ./caddy run --config examples/basic-config.Caddyfile
 ```
 
-Test with a malicious request:
+### 2. Test Threat Detection
+
 ```bash
-curl -H "User-Agent: curl/7.68.0" http://localhost:8080/admin
+# Test malicious user agent
+curl -H "User-Agent: curl/7.68.0" http://localhost:8080/
+
+# Test malicious path
+curl http://localhost:8080/admin/config
+
+# Test combination
+curl -H "User-Agent: sqlmap/1.0" http://localhost:8080/.env
 ```
 
-### 2. Webhook Testing
+### 3. Monitor Logs
 
-Set up a simple webhook receiver:
 ```bash
-# Terminal 1: Start webhook receiver
-python3 -m http.server 9090
+# Follow Caddy logs
+tail -f /var/log/caddy/caddy.log
 
-# Terminal 2: Start Caddy
-./caddy run --config examples/Caddyfile
+# Follow threat logs
+tail -f /var/log/caddy/threats.log
 
-# Terminal 3: Send test request
-curl -H "User-Agent: curl/7.68.0" http://localhost:8080/config
+# Docker logs
+docker-compose logs -f caddy-gfwreport
 ```
 
-### 3. Script Execution Testing
+### 4. Webhook Testing
 
-Ensure the processing script is executable:
+Start the test webhook server:
+
 ```bash
-chmod +x examples/scripts/process-threat.sh
+python3 examples/webhook-server.py
 ```
 
-Test the script directly:
+The server will listen on port 8080 and log all received webhooks.
+
+### 5. Load Testing
+
 ```bash
-./examples/scripts/process-threat.sh "192.168.1.100" "/admin" "curl/7.68.0" "GET" "2024-01-01T12:00:00Z" "malicious_path"
+# Install Apache Bench
+# Ubuntu: sudo apt-get install apache2-utils
+# macOS: brew install httpie
+
+# Basic load test
+ab -n 1000 -c 10 http://localhost:8080/
+
+# Test with malicious patterns
+ab -n 100 -c 5 -H "User-Agent: curl/7.68.0" http://localhost:8080/admin
+```
+
+### 6. Unit Testing
+
+```bash
+# Run plugin unit tests
+cd gfwreport && go test -v
+
+# Run with race detection
+cd gfwreport && go test -race -v
+
+# Run benchmarks
+cd gfwreport && go test -bench=. -benchmem
 ```
 
 ## Monitoring and Logging

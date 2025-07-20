@@ -31,22 +31,22 @@ func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) error {
 func TestGFWReportHandler_CaddyModule(t *testing.T) {
 	handler := GFWReportHandler{}
 	moduleInfo := handler.CaddyModule()
-	
+
 	expectedID := "http.handlers.gfwreport"
 	if string(moduleInfo.ID) != expectedID {
 		t.Errorf("expected module ID %s, got %s", expectedID, string(moduleInfo.ID))
 	}
-	
+
 	if moduleInfo.New == nil {
 		t.Error("expected New function to be set")
 	}
-	
+
 	// Test that New() returns a new instance
 	newHandler := moduleInfo.New()
 	if newHandler == nil {
 		t.Error("expected New() to return a non-nil handler")
 	}
-	
+
 	if _, ok := newHandler.(*GFWReportHandler); !ok {
 		t.Error("expected New() to return a *GFWReportHandler")
 	}
@@ -84,25 +84,25 @@ func TestGFWReportHandler_Provision(t *testing.T) {
 			wantErr:    false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := &GFWReportHandler{
 				ConfigFile: tt.configFile,
 				Hook:       tt.hook,
 			}
-			
+
 			// Create a minimal context for testing
 			ctx := caddy.Context{
 				Context: context.Background(),
 			}
-			
+
 			err := handler.Provision(ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Provision() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if err == nil {
 				// Verify components are initialized
 				if handler.logger == nil {
@@ -123,7 +123,7 @@ func TestGFWReportHandler_Provision(t *testing.T) {
 				if handler.cancel == nil {
 					t.Error("expected cancel function to be initialized")
 				}
-				
+
 				// Clean up
 				handler.Cleanup()
 			}
@@ -134,29 +134,29 @@ func TestGFWReportHandler_Provision(t *testing.T) {
 func TestGFWReportHandler_ServeHTTP(t *testing.T) {
 	// Create and provision handler
 	handler := &GFWReportHandler{}
-	
+
 	// Create a minimal context for testing
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("failed to provision handler: %v", err)
 	}
 	defer handler.Cleanup()
-	
+
 	// Create mock next handler
 	nextHandler := &mockHandler{}
-	
+
 	// Create test request
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("User-Agent", "test-agent")
 	req.RemoteAddr = "192.168.1.1:12345"
-	
+
 	// Create response recorder
 	w := httptest.NewRecorder()
-	
+
 	// Call ServeHTTP
 	err = handler.ServeHTTP(w, req, caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 		nextHandler.called = true
@@ -165,12 +165,12 @@ func TestGFWReportHandler_ServeHTTP(t *testing.T) {
 	if err != nil {
 		t.Errorf("ServeHTTP() error = %v", err)
 	}
-	
+
 	// Verify next handler was called
 	if !nextHandler.called {
 		t.Error("expected next handler to be called")
 	}
-	
+
 	// Give some time for async processing
 	time.Sleep(100 * time.Millisecond)
 }
@@ -178,32 +178,32 @@ func TestGFWReportHandler_ServeHTTP(t *testing.T) {
 func TestGFWReportHandler_ServeHTTP_WithThreat(t *testing.T) {
 	// Create handler with pattern that will match
 	handler := &GFWReportHandler{}
-	
+
 	// Create a minimal context for testing
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("failed to provision handler: %v", err)
 	}
 	defer handler.Cleanup()
-	
+
 	// Add a malicious path pattern
 	handler.patternMgr.AddPathPattern("/admin.*")
-	
+
 	// Create mock next handler
 	nextHandler := &mockHandler{}
-	
+
 	// Create test request that should trigger threat detection
 	req := httptest.NewRequest("GET", "/admin/config", nil)
 	req.Header.Set("User-Agent", "malicious-bot")
 	req.RemoteAddr = "1.1.1.1:12345"
-	
+
 	// Create response recorder
 	w := httptest.NewRecorder()
-	
+
 	// Call ServeHTTP
 	err = handler.ServeHTTP(w, req, caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 		nextHandler.called = true
@@ -212,40 +212,40 @@ func TestGFWReportHandler_ServeHTTP_WithThreat(t *testing.T) {
 	if err != nil {
 		t.Errorf("ServeHTTP() error = %v", err)
 	}
-	
+
 	// Verify next handler was still called (non-blocking)
 	if !nextHandler.called {
 		t.Error("expected next handler to be called even with threat")
 	}
-	
+
 	// Give some time for async processing
 	time.Sleep(100 * time.Millisecond)
 }
 
 func TestGFWReportHandler_Cleanup(t *testing.T) {
 	handler := &GFWReportHandler{}
-	
+
 	// Create a minimal context for testing
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("failed to provision handler: %v", err)
 	}
-	
+
 	// Verify components are running
 	if handler.ctx == nil {
 		t.Error("expected context to be set")
 	}
-	
+
 	// Call cleanup
 	err = handler.Cleanup()
 	if err != nil {
 		t.Errorf("Cleanup() error = %v", err)
 	}
-	
+
 	// Cleanup should be idempotent
 	err = handler.Cleanup()
 	if err != nil {
@@ -465,14 +465,14 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 			errorMsg:    "unknown hook directive",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			handler := &GFWReportHandler{}
-			
+
 			err := handler.UnmarshalCaddyfile(dispenser)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
@@ -483,17 +483,17 @@ func TestGFWReportHandler_UnmarshalCaddyfile(t *testing.T) {
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			// Compare results
 			if handler.ConfigFile != tt.expected.ConfigFile {
 				t.Errorf("expected ConfigFile %s, got %s", tt.expected.ConfigFile, handler.ConfigFile)
 			}
-			
+
 			if tt.expected.Hook == nil {
 				if handler.Hook != nil {
 					t.Errorf("expected Hook to be nil, got %+v", handler.Hook)
@@ -518,28 +518,28 @@ func TestGFWReportHandler_Integration(t *testing.T) {
 	// Create a complete integration test
 	handler := &GFWReportHandler{
 		ConfigFile: "", // No config file for this test
-		Hook: &HookConfig{
+		Hook:       &HookConfig{
 			// No hooks for this test to avoid external dependencies
 		},
 	}
-	
+
 	// Create a minimal context for testing
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	// Provision the handler
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("failed to provision handler: %v", err)
 	}
 	defer handler.Cleanup()
-	
+
 	// Add some test patterns
 	handler.patternMgr.AddIPPattern("192.168.1.0/24")
 	handler.patternMgr.AddPathPattern("/admin.*")
 	handler.patternMgr.AddUserAgentPattern("malicious-bot*")
-	
+
 	// Test multiple requests
 	testCases := []struct {
 		name       string
@@ -553,20 +553,20 @@ func TestGFWReportHandler_Integration(t *testing.T) {
 		{"malicious path", "GET", "/admin/config", "Mozilla/5.0", "10.0.0.1:12345"},
 		{"malicious UA", "GET", "/", "malicious-bot-v1.0", "10.0.0.1:12345"},
 	}
-	
+
 	nextHandler := &mockHandler{}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			req.Header.Set("User-Agent", tc.userAgent)
 			req.RemoteAddr = tc.remoteAddr
-			
+
 			w := httptest.NewRecorder()
-			
+
 			// Reset mock handler
 			nextHandler.called = false
-			
+
 			err := handler.ServeHTTP(w, req, caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 				nextHandler.called = true
 				return nextHandler.ServeHTTP(w, r)
@@ -574,14 +574,14 @@ func TestGFWReportHandler_Integration(t *testing.T) {
 			if err != nil {
 				t.Errorf("ServeHTTP() error = %v", err)
 			}
-			
+
 			// Verify next handler was called
 			if !nextHandler.called {
 				t.Error("expected next handler to be called")
 			}
 		})
 	}
-	
+
 	// Give time for async processing
 	time.Sleep(200 * time.Millisecond)
 }
@@ -589,34 +589,34 @@ func TestGFWReportHandler_Integration(t *testing.T) {
 // Benchmark tests
 func BenchmarkGFWReportHandler_ServeHTTP(b *testing.B) {
 	handler := &GFWReportHandler{}
-	
+
 	// Create a minimal context for testing
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	err := handler.Provision(ctx)
 	if err != nil {
 		b.Fatalf("failed to provision handler: %v", err)
 	}
 	defer handler.Cleanup()
-	
+
 	// Add some patterns for realistic testing
 	handler.patternMgr.AddIPPattern("192.168.1.0/24")
 	handler.patternMgr.AddPathPattern("/admin.*")
 	handler.patternMgr.AddUserAgentPattern("bot*")
-	
+
 	nextHandler := &mockHandler{}
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("User-Agent", "test-agent")
 	req.RemoteAddr = "10.0.0.1:12345"
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		w := httptest.NewRecorder()
 		nextHandler.called = false
-		
+
 		err := handler.ServeHTTP(w, req, caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 			nextHandler.called = true
 			return nextHandler.ServeHTTP(w, r)
@@ -648,7 +648,7 @@ func TestIsValidURL(t *testing.T) {
 		{"URL with file scheme", "file:///path/to/file", false},
 		{"URL with custom scheme", "custom://example.com", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isValidURL(tt.url)
@@ -696,15 +696,15 @@ func TestGFWReportHandler_ParseFileDirective(t *testing.T) {
 			errorMsg:    "file directive accepts only one argument",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			dispenser.Next() // Move to the directive
-			
+
 			handler := &GFWReportHandler{}
 			err := handler.parseFileDirective(dispenser)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
@@ -715,12 +715,12 @@ func TestGFWReportHandler_ParseFileDirective(t *testing.T) {
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if handler.ConfigFile != tt.expected {
 				t.Errorf("expected ConfigFile %s, got %s", tt.expected, handler.ConfigFile)
 			}
@@ -777,17 +777,17 @@ func TestGFWReportHandler_ParseRemoteHook(t *testing.T) {
 			errorMsg:    "remote directive accepts only one argument",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			dispenser.Next() // Move to the directive
-			
+
 			handler := &GFWReportHandler{
 				Hook: &HookConfig{},
 			}
 			err := handler.parseRemoteHook(dispenser)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
@@ -798,12 +798,12 @@ func TestGFWReportHandler_ParseRemoteHook(t *testing.T) {
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if handler.Hook.Remote != tt.expected {
 				t.Errorf("expected Hook.Remote %s, got %s", tt.expected, handler.Hook.Remote)
 			}
@@ -853,17 +853,17 @@ func TestGFWReportHandler_ParseExecHook(t *testing.T) {
 			errorMsg:    "exec directive accepts only one argument",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			dispenser.Next() // Move to the directive
-			
+
 			handler := &GFWReportHandler{
 				Hook: &HookConfig{},
 			}
 			err := handler.parseExecHook(dispenser)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
@@ -874,12 +874,12 @@ func TestGFWReportHandler_ParseExecHook(t *testing.T) {
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if handler.Hook.Exec != tt.expected {
 				t.Errorf("expected Hook.Exec %s, got %s", tt.expected, handler.Hook.Exec)
 			}
@@ -936,12 +936,12 @@ func TestGFWReportHandler_ValidateConfig(t *testing.T) {
 			errorMsg:    "hook block requires at least one of 'remote' or 'exec' directives",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser("gfwreport {}")
 			err := tt.handler.validateConfig(dispenser)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
@@ -952,7 +952,7 @@ func TestGFWReportHandler_ValidateConfig(t *testing.T) {
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -1028,26 +1028,26 @@ func TestGFWReportHandler_ComplexConfigurations(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			handler := &GFWReportHandler{}
-			
+
 			err := handler.UnmarshalCaddyfile(dispenser)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if tt.validate != nil {
 				tt.validate(t, handler)
 			}
@@ -1055,7 +1055,7 @@ func TestGFWReportHandler_ComplexConfigurations(t *testing.T) {
 	}
 }
 
-// Test the parseCaddyfile function integration
+// Test the ParseCaddyfile function integration
 func TestParseCaddyfile(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -1101,30 +1101,30 @@ func TestParseCaddyfile(t *testing.T) {
 			validate:    nil,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dispenser := caddyfile.NewTestDispenser(tt.input)
 			helper := httpcaddyfile.Helper{Dispenser: dispenser}
-			
-			handler, err := parseCaddyfile(helper)
-			
+
+			handler, err := ParseCaddyfile(helper)
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
 			}
-			
+
 			if handler == nil {
 				t.Fatal("expected handler to be returned")
 			}
-			
+
 			if tt.validate != nil {
 				tt.validate(t, handler)
 			}
@@ -1165,26 +1165,26 @@ func TestGFWReportHandler_LifecycleManagement(t *testing.T) {
 			wantErr:    false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			handler := &GFWReportHandler{
 				ConfigFile: tt.configFile,
 				Hook:       tt.hook,
 			}
-			
+
 			// Create a minimal context for testing
 			ctx := caddy.Context{
 				Context: context.Background(),
 			}
-			
+
 			// Test Provision
 			err := handler.Provision(ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Provision() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if err == nil {
 				// Verify components are properly initialized
 				if handler.logger == nil {
@@ -1205,7 +1205,7 @@ func TestGFWReportHandler_LifecycleManagement(t *testing.T) {
 				if handler.cancel == nil {
 					t.Error("expected cancel function to be initialized")
 				}
-				
+
 				// Test that components are actually running
 				// Submit a test request to verify analyzer is working
 				requestInfo := &RequestInfo{
@@ -1215,19 +1215,19 @@ func TestGFWReportHandler_LifecycleManagement(t *testing.T) {
 					Method:    "GET",
 					Headers:   make(map[string]string),
 				}
-				
+
 				// This should not panic or block
 				handler.analyzer.AnalyzeRequest(requestInfo)
-				
+
 				// Give some time for async processing
 				time.Sleep(50 * time.Millisecond)
-				
+
 				// Test Cleanup
 				err = handler.Cleanup()
 				if err != nil {
 					t.Errorf("Cleanup() error = %v", err)
 				}
-				
+
 				// Verify components are cleaned up
 				if handler.analyzer != nil {
 					t.Error("expected analyzer to be cleaned up")
@@ -1251,38 +1251,38 @@ func TestGFWReportHandler_LifecycleManagement(t *testing.T) {
 
 func TestGFWReportHandler_LifecycleIdempotency(t *testing.T) {
 	handler := &GFWReportHandler{}
-	
+
 	// Create a minimal context for testing
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	// Test multiple provisions (should be safe)
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("first Provision() error = %v", err)
 	}
-	
+
 	// Second provision should work (though not recommended in practice)
 	// First cleanup the previous state
 	handler.Cleanup()
-	
+
 	err = handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("second Provision() error = %v", err)
 	}
-	
+
 	// Test multiple cleanups (should be idempotent)
 	err = handler.Cleanup()
 	if err != nil {
 		t.Errorf("first Cleanup() error = %v", err)
 	}
-	
+
 	err = handler.Cleanup()
 	if err != nil {
 		t.Errorf("second Cleanup() error = %v", err)
 	}
-	
+
 	// Third cleanup should still work
 	err = handler.Cleanup()
 	if err != nil {
@@ -1292,35 +1292,35 @@ func TestGFWReportHandler_LifecycleIdempotency(t *testing.T) {
 
 func TestGFWReportHandler_LifecycleWithConcurrency(t *testing.T) {
 	handler := &GFWReportHandler{}
-	
+
 	// Create a minimal context for testing
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("Provision() error = %v", err)
 	}
-	
+
 	// Test concurrent access during normal operation
 	var wg sync.WaitGroup
 	numGoroutines := 10
 	numRequests := 100
-	
+
 	// Start multiple goroutines making requests
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			
+
 			for j := 0; j < numRequests; j++ {
 				req := httptest.NewRequest("GET", fmt.Sprintf("/test-%d-%d", id, j), nil)
 				req.Header.Set("User-Agent", fmt.Sprintf("test-agent-%d", id))
 				req.RemoteAddr = fmt.Sprintf("192.168.1.%d:12345", (id%254)+1)
-				
+
 				w := httptest.NewRecorder()
-				
+
 				nextHandler := &mockHandler{}
 				err := handler.ServeHTTP(w, req, caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 					nextHandler.called = true
@@ -1329,20 +1329,20 @@ func TestGFWReportHandler_LifecycleWithConcurrency(t *testing.T) {
 				if err != nil {
 					t.Errorf("ServeHTTP() error = %v", err)
 				}
-				
+
 				if !nextHandler.called {
 					t.Error("expected next handler to be called")
 				}
 			}
 		}(i)
 	}
-	
+
 	// Wait for all requests to complete
 	wg.Wait()
-	
+
 	// Give some time for async processing
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Now test cleanup while there might still be some processing
 	err = handler.Cleanup()
 	if err != nil {
@@ -1352,23 +1352,23 @@ func TestGFWReportHandler_LifecycleWithConcurrency(t *testing.T) {
 
 func TestGFWReportHandler_LifecycleWithContextCancellation(t *testing.T) {
 	handler := &GFWReportHandler{}
-	
+
 	// Create a context that we can cancel
 	parentCtx, parentCancel := context.WithCancel(context.Background())
 	ctx := caddy.Context{
 		Context: parentCtx,
 	}
-	
+
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("Provision() error = %v", err)
 	}
-	
+
 	// Verify handler is working
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 	nextHandler := &mockHandler{}
-	
+
 	err = handler.ServeHTTP(w, req, caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 		nextHandler.called = true
 		return nextHandler.ServeHTTP(w, r)
@@ -1376,17 +1376,17 @@ func TestGFWReportHandler_LifecycleWithContextCancellation(t *testing.T) {
 	if err != nil {
 		t.Errorf("ServeHTTP() error = %v", err)
 	}
-	
+
 	if !nextHandler.called {
 		t.Error("expected next handler to be called")
 	}
-	
+
 	// Cancel the parent context
 	parentCancel()
-	
+
 	// Give some time for the cancellation to propagate
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Cleanup should still work
 	err = handler.Cleanup()
 	if err != nil {
@@ -1399,22 +1399,22 @@ func TestGFWReportHandler_LifecycleErrorHandling(t *testing.T) {
 	handler := &GFWReportHandler{
 		ConfigFile: "/nonexistent/path/to/patterns.txt",
 	}
-	
+
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	// Should not fail even with invalid config file
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Errorf("Provision() should not fail with invalid config file, got error: %v", err)
 	}
-	
+
 	// Components should still be initialized
 	if handler.analyzer == nil {
 		t.Error("expected analyzer to be initialized even with invalid config")
 	}
-	
+
 	// Cleanup should work
 	err = handler.Cleanup()
 	if err != nil {
@@ -1425,18 +1425,18 @@ func TestGFWReportHandler_LifecycleErrorHandling(t *testing.T) {
 func TestGFWReportHandler_LifecycleResourceManagement(t *testing.T) {
 	// Test that resources are properly managed during lifecycle
 	handler := &GFWReportHandler{}
-	
+
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	// Provision multiple times with cleanup in between
 	for i := 0; i < 5; i++ {
 		err := handler.Provision(ctx)
 		if err != nil {
 			t.Fatalf("Provision() iteration %d error = %v", i, err)
 		}
-		
+
 		// Verify components are initialized
 		if handler.analyzer == nil {
 			t.Errorf("iteration %d: expected analyzer to be initialized", i)
@@ -1444,7 +1444,7 @@ func TestGFWReportHandler_LifecycleResourceManagement(t *testing.T) {
 		if handler.ctx == nil {
 			t.Errorf("iteration %d: expected context to be initialized", i)
 		}
-		
+
 		// Submit some requests
 		for j := 0; j < 10; j++ {
 			requestInfo := &RequestInfo{
@@ -1456,16 +1456,16 @@ func TestGFWReportHandler_LifecycleResourceManagement(t *testing.T) {
 			}
 			handler.analyzer.AnalyzeRequest(requestInfo)
 		}
-		
+
 		// Give some time for processing
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// Cleanup
 		err = handler.Cleanup()
 		if err != nil {
 			t.Errorf("Cleanup() iteration %d error = %v", i, err)
 		}
-		
+
 		// Verify cleanup
 		if handler.analyzer != nil {
 			t.Errorf("iteration %d: expected analyzer to be cleaned up", i)
@@ -1478,21 +1478,21 @@ func TestGFWReportHandler_LifecycleResourceManagement(t *testing.T) {
 
 func TestGFWReportHandler_LifecycleThreadSafety(t *testing.T) {
 	handler := &GFWReportHandler{}
-	
+
 	ctx := caddy.Context{
 		Context: context.Background(),
 	}
-	
+
 	err := handler.Provision(ctx)
 	if err != nil {
 		t.Fatalf("Provision() error = %v", err)
 	}
-	
+
 	// Test concurrent cleanup calls
 	var wg sync.WaitGroup
 	numGoroutines := 10
 	errors := make(chan error, numGoroutines)
-	
+
 	for i := 0; i < numGoroutines; i++ {
 		wg.Add(1)
 		go func() {
@@ -1503,10 +1503,10 @@ func TestGFWReportHandler_LifecycleThreadSafety(t *testing.T) {
 			}
 		}()
 	}
-	
+
 	wg.Wait()
 	close(errors)
-	
+
 	// Check for errors
 	for err := range errors {
 		t.Errorf("concurrent Cleanup() error = %v", err)

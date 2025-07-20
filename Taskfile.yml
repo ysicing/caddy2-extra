@@ -2,53 +2,178 @@
 
 version: '3'
 
+vars:
+  PLUGIN_NAME: gfwreport
+  BINARY_NAME: caddy
+  BUILD_DIR: build
+
 tasks:
+  # Code formatting and linting
   gofmt:
+    desc: Format Go code
     cmds:
       - go install golang.org/x/tools/cmd/goimports@latest
       - gofmt -s -w .
       - goimports -w .
 
-  govulncheck:
-    desc: vulnerability detection
-    cmds:
-      - go install golang.org/x/vuln/cmd/govulncheck@v1.1.1
-      - govulncheck ./...
-
-  golint:
-    cmds:
-      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
-      - golangci-lint run -v ./...
-
   gci:
+    desc: Format imports
     cmds:
       - go install github.com/daixiang0/gci@v0.13.1
       - gci write --skip-generated --custom-order -s standard -s "prefix(github.com/ysicing/caddy2-extra)" -s default -s blank -s dot .
 
+  golint:
+    desc: Run golangci-lint
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+      - golangci-lint run -v ./...
+
+  govulncheck:
+    desc: Run vulnerability detection
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck@v1.1.1
+      - govulncheck ./...
+
   fmt:
-    desc: format code
+    desc: Format code and run security checks
     run: once
     cmds:
       - task: gofmt
       - task: gci
       - task: govulncheck
 
+  # Testing
+  test:
+    desc: Run unit tests
+    dir: gfwreport
+    cmds:
+      - go test -v ./...
+
+  test-race:
+    desc: Run tests with race detection
+    dir: gfwreport
+    cmds:
+      - go test -race -v ./...
+
+  test-coverage:
+    desc: Run tests with coverage
+    dir: gfwreport
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report generated: gfwreport/coverage.html"
+
+  bench:
+    desc: Run benchmarks
+    dir: gfwreport
+    cmds:
+      - go test -bench=. -benchmem ./...
+
+  # Building
+  build-plugin:
+    desc: Build plugin only (for development)
+    dir: gfwreport
+    cmds:
+      - go build -v ./...
+
   build:
+    desc: Build Caddy with GFWReport plugin
     cmds:
       - go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-      - xcaddy build
-          --with github.com/ysicing/caddy2-geocn=../caddy2-extra
+      - mkdir -p {{.BUILD_DIR}}
+      - xcaddy build --output {{.BUILD_DIR}}/{{.BINARY_NAME}} --with github.com/ysicing/caddy2-extra/gfwreport=./gfwreport
+      - echo "Binary built: {{.BUILD_DIR}}/{{.BINARY_NAME}}"
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} list-modules | grep {{.PLUGIN_NAME}}
+
+  build-full:
+    desc: Build Caddy with GFWReport and DNS plugins
+    cmds:
+      - go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+      - mkdir -p {{.BUILD_DIR}}
+      - xcaddy build --output {{.BUILD_DIR}}/{{.BINARY_NAME}}
+          --with github.com/ysicing/caddy2-extra/gfwreport=./gfwreport
           --with github.com/caddy-dns/cloudflare
           --with github.com/caddy-dns/tencentcloud
           --with github.com/caddy-dns/alidns
-      - ./caddy list-modules
+      - echo "Binary built: {{.BUILD_DIR}}/{{.BINARY_NAME}}"
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} list-modules
 
-  run:
+  # Development and testing
+  dev:
+    desc: Build and run with development config
     cmds:
       - task: build
-      - ./caddy run --config ./Caddyfile.local --adapter caddyfile
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} run --config examples/basic-config.Caddyfile --adapter caddyfile
 
-  default:
+  run:
+    desc: Run with local config
     cmds:
-      - rm -rf ./caddy
+      - task: build
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} run --config ./Caddyfile.local --adapter caddyfile
+
+  validate:
+    desc: Validate configuration files
+    cmds:
+      - task: build
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} validate --config examples/basic-config.Caddyfile --adapter caddyfile
+      - ./{{.BUILD_DIR}}/{{.BINARY_NAME}} validate --config examples/advanced-config.Caddyfile --adapter caddyfile
+
+  # Docker
+  docker-build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t caddy-{{.PLUGIN_NAME}}:latest -f examples/Dockerfile .
+
+  docker-run:
+    desc: Run Docker container
+    cmds:
+      - task: docker-build
+      - docker run -d --name caddy-{{.PLUGIN_NAME}} -p 8080:80 -p 2019:2019 caddy-{{.PLUGIN_NAME}}:latest
+
+  docker-stop:
+    desc: Stop and remove Docker container
+    cmds:
+      - docker stop caddy-{{.PLUGIN_NAME}} || true
+      - docker rm caddy-{{.PLUGIN_NAME}} || true
+
+  # Utilities
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+      - rm -f gfwreport/coverage.out gfwreport/coverage.html
+      - rm -f {{.BINARY_NAME}}
+
+  install:
+    desc: Install binary to /usr/local/bin
+    cmds:
+      - task: build
+      - sudo cp {{.BUILD_DIR}}/{{.BINARY_NAME}} /usr/local/bin/
+      - sudo chmod +x /usr/local/bin/{{.BINARY_NAME}}
+      - echo "Installed to /usr/local/bin/{{.BINARY_NAME}}"
+
+  # CI/CD tasks
+  ci:
+    desc: Run CI pipeline (format, lint, test, build)
+    cmds:
+      - task: fmt
+      - task: golint
+      - task: test
+      - task: test-race
+      - task: build
+
+  release:
+    desc: Prepare for release
+    cmds:
+      - task: clean
+      - task: ci
+      - task: test-coverage
+      - task: bench
+      - echo "Release preparation complete"
+
+  # Default task
+  default:
+    desc: Clean and build
+    cmds:
+      - task: clean
       - task: build

@@ -56,27 +56,27 @@ func GetClientIP(r *http.Request) net.IP {
 			}
 		}
 	}
-	
+
 	// Check X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		if parsedIP := net.ParseIP(xri); parsedIP != nil {
 			return parsedIP
 		}
 	}
-	
+
 	// Fall back to RemoteAddr
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return net.ParseIP(r.RemoteAddr)
 	}
-	
+
 	return net.ParseIP(host)
 }
 
 // ExtractHeaders extracts relevant headers from the HTTP request
 func ExtractHeaders(r *http.Request) map[string]string {
 	headers := make(map[string]string)
-	
+
 	// Extract commonly used headers for threat analysis
 	relevantHeaders := []string{
 		"Host",
@@ -89,13 +89,13 @@ func ExtractHeaders(r *http.Request) map[string]string {
 		"Accept-Encoding",
 		"Connection",
 	}
-	
+
 	for _, headerName := range relevantHeaders {
 		if value := r.Header.Get(headerName); value != "" {
 			headers[headerName] = value
 		}
 	}
-	
+
 	return headers
 }
 
@@ -116,7 +116,7 @@ func ExtractRequestInfo(r *http.Request) *RequestInfo {
 	ip := GetClientIP(r)
 	headers := ExtractHeaders(r)
 	userAgent := r.Header.Get("User-Agent")
-	
+
 	return NewRequestInfo(ip, r.URL.Path, userAgent, r.Method, headers)
 }
 
@@ -138,39 +138,39 @@ func (te *ThreatEvent) Validate() error {
 	if te.IP == "" {
 		return fmt.Errorf("IP address is required")
 	}
-	
+
 	// Validate IP format
 	if net.ParseIP(te.IP) == nil {
 		return fmt.Errorf("invalid IP address format: %s", te.IP)
 	}
-	
+
 	if te.Path == "" {
 		return fmt.Errorf("path is required")
 	}
-	
+
 	if te.Method == "" {
 		return fmt.Errorf("HTTP method is required")
 	}
-	
+
 	if te.ThreatType == "" {
 		return fmt.Errorf("threat type is required")
 	}
-	
+
 	// Validate threat type is one of the known types
 	validThreatTypes := map[string]bool{
 		ThreatTypeIP:        true,
 		ThreatTypePath:      true,
 		ThreatTypeUserAgent: true,
 	}
-	
+
 	if !validThreatTypes[te.ThreatType] {
 		return fmt.Errorf("invalid threat type: %s", te.ThreatType)
 	}
-	
+
 	if te.Timestamp.IsZero() {
 		return fmt.Errorf("timestamp is required")
 	}
-	
+
 	return nil
 }
 
@@ -179,7 +179,7 @@ func (te *ThreatEvent) ToJSON() ([]byte, error) {
 	if err := te.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
-	
+
 	return json.Marshal(te)
 }
 
@@ -188,6 +188,6 @@ func (te *ThreatEvent) FromJSON(data []byte) error {
 	if err := json.Unmarshal(data, te); err != nil {
 		return fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
-	
+
 	return te.Validate()
 }

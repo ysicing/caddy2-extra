@@ -58,6 +58,27 @@ check_prerequisites() {
     fi
 }
 
+# Show external build command
+show_external_build_command() {
+    log_info "External build command:"
+    echo ""
+    echo "To build from an external directory, use:"
+    echo ""
+    echo "  xcaddy build --with github.com/ysicing/caddy2-extra/gfwreport=../caddy2-extra/gfwreport"
+    echo ""
+    echo "Or if you're in a different relative path:"
+    echo ""
+    echo "  xcaddy build --with github.com/ysicing/caddy2-extra/gfwreport=/path/to/caddy2-extra/gfwreport"
+    echo ""
+    log_info "This will create a 'caddy' binary in your current directory with the gfwreport plugin included."
+    echo ""
+    log_info "Example usage:"
+    echo "  mkdir ~/my-caddy-build"
+    echo "  cd ~/my-caddy-build"
+    echo "  xcaddy build --with github.com/ysicing/caddy2-extra/gfwreport=~/path/to/caddy2-extra/gfwreport"
+    echo "  ./caddy list-modules | grep gfwreport"
+}
+
 # Method 1: Build using xcaddy (recommended)
 build_with_xcaddy() {
     log_info "Building with xcaddy..."
@@ -79,7 +100,7 @@ build_with_xcaddy() {
     log_info "Running xcaddy build..."
     xcaddy build \
         --output "$BUILD_DIR/$BINARY_NAME" \
-        --with "github.com/ysicing/caddy2-extra/gfwreport=."
+        --with "github.com/ysicing/caddy2-extra/gfwreport=./gfwreport"
     
     if [ $? -eq 0 ]; then
         log_success "Build completed successfully with xcaddy"
@@ -212,6 +233,7 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  xcaddy      Build using xcaddy (recommended)"
+    echo "  external    Build from external directory (xcaddy build --with github.com/ysicing/caddy2-extra/gfwreport=../caddy2-extra/gfwreport)"
     echo "  manual      Build manually with go build"
     echo "  docker      Build Docker image"
     echo "  test        Test the built binary"
@@ -222,6 +244,7 @@ usage() {
     echo ""
     echo "Examples:"
     echo "  $0 xcaddy           # Build with xcaddy"
+    echo "  $0 external         # Show external build command"
     echo "  $0 manual           # Build manually"
     echo "  $0 docker           # Build Docker image"
     echo "  $0 all              # Build, test, and show info"
@@ -235,6 +258,9 @@ main() {
         "xcaddy")
             check_prerequisites
             build_with_xcaddy
+            ;;
+        "external")
+            show_external_build_command
             ;;
         "manual")
             check_prerequisites
